@@ -1,0 +1,24 @@
+team: initiative-tracker
+description: "D&D Initiative Tracker — real-time WebSocket-based turn tracker for tabletop RPG combat"
+
+members:
+  - name: architect
+    role: "System design, API contracts, shared types, spec"
+    tools: [Read, Grep, Glob, "Bash(git:*)"]
+    owns: [".specs/**", "*.md", "src/shared/**", "TODO.md"]
+
+  - name: backend
+    role: "Server logic, WebSocket handling, session management, room codes"
+    tools: [Read, Write, Edit, Grep, Glob, "Bash(git:*)", "Bash(npm run dev:*)"]
+    owns: ["src/server/**"]
+
+  - name: frontend
+    role: "UI components, state management, PWA, CSS, Svelte 5"
+    tools: [Read, Write, Edit, Grep, Glob, "Bash(git:*)", "Bash(npm run dev:*)"]
+    owns: ["src/client/**", "public/**", "index.html"]
+    isolation: worktree
+
+  - name: devops
+    role: "Tests, deployment config, CI/CD, Docker"
+    tools: [Read, Write, Edit, Grep, Glob, "Bash(git:*)"]
+    owns: ["tests/**", "Dockerfile", "fly.toml", ".github/**"]

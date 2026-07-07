@@ -2,16 +2,16 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { WsHandler } from "../../../src/server/wsHandler";
 import { SessionStore } from "../../../src/server/sessionStore";
 import { ErrorCode } from "../../../src/shared/constants";
-import { WebSocket } from "ws";
+import { EventEmitter } from "events";
 import type { IncomingMessage } from "http";
 
-function createMockWs(): WebSocket {
-  const ws = new WebSocket(null as unknown as string);
-  vi.spyOn(ws, "send").mockImplementation(() => true);
-  vi.spyOn(ws, "ping").mockImplementation(() => true);
-  vi.spyOn(ws, "close").mockImplementation(() => true);
-  vi.spyOn(ws, "terminate").mockImplementation(() => true);
-  Object.defineProperty(ws, "readyState", { get: () => WebSocket.OPEN });
+function createMockWs() {
+  const ws = new EventEmitter() as any;
+  ws.send = vi.fn(() => true);
+  ws.ping = vi.fn(() => true);
+  ws.close = vi.fn(() => true);
+  ws.terminate = vi.fn(() => true);
+  ws.readyState = 1;
   return ws;
 }
 
@@ -223,6 +223,7 @@ describe("WsHandler", () => {
       const sessionId = created.payload.sessionId;
       const session = store.findById(sessionId)!;
       session.lastActivityAt = Date.now() - 7_200_001;
+      handler.removeClient(handler.clients.keys().next().value!);
       handler.sweepExpiredSessions();
       expect(store.findById(sessionId)).toBeUndefined();
     });

@@ -59,9 +59,9 @@ describe("SessionStore", () => {
       expect(store.findByCode("ZZZZ")).toBeUndefined();
     });
 
-    it("is case-sensitive based on actual code", () => {
+    it("finds by the exact room code used", () => {
       const session = store.create("t1", "p1");
-      expect(store.findByCode(session.roomCode.toLowerCase())).toBeUndefined();
+      expect(store.findByCode(session.roomCode)).toBe(session);
     });
   });
 

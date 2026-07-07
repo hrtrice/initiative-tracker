@@ -10,14 +10,13 @@ describe("Express Server", () => {
   let server: http.Server;
   let port: number;
   let store: SessionStore;
-  let wsHandler: WsHandler;
 
-  beforeAll(() => {
+  beforeAll(async () => {
     const app = express();
     server = createServer(app);
     const wss = new WebSocketServer({ server });
     store = new SessionStore();
-    wsHandler = new WsHandler(store);
+    const wsHandler = new WsHandler(store);
 
     app.get("/health", (_req, res) => {
       res.json({
@@ -41,12 +40,14 @@ describe("Express Server", () => {
       wsHandler.handleConnection(ws, req);
     });
 
-    port = 0;
-    server.listen(0, () => {
-      const addr = server.address();
-      if (addr && typeof addr === "object") {
-        port = addr.port;
-      }
+    await new Promise<void>((resolve) => {
+      server.listen(0, "127.0.0.1", () => {
+        const addr = server.address();
+        if (addr && typeof addr === "object") {
+          port = addr.port;
+        }
+        resolve();
+      });
     });
   });
 

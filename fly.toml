@@ -1,4 +1,4 @@
-app = "initiative-tracker"
+app = "easy-initiative-tracker"
 primary_region = "iad"
 
 [build]

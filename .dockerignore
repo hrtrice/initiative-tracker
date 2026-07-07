@@ -1,0 +1,7 @@
+node_modules
+.opencode
+.git
+dist
+.env
+*.local
+tests

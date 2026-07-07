@@ -8,7 +8,7 @@
   import DMToolbar from "./components/DMToolbar.svelte";
 
   const {
-    state,
+    state: sessionState,
     connectionStatus,
     createSession,
     joinSession,
@@ -25,14 +25,14 @@
   } = createSessionState();
 
   const { currentPlayer, isWrapping } = createTurnDerived(
-    () => state.players,
-    () => state.turnState,
+    () => sessionState.players,
+    () => sessionState.turnState,
   );
 
   let view = $state<"lobby" | "session">("lobby");
 
   $effect(() => {
-    if (state.sessionId) {
+    if (sessionState.sessionId) {
       view = "session";
     } else {
       view = "lobby";
@@ -52,9 +52,9 @@
   });
 </script>
 
-{#if state.error}
+{#if sessionState.error}
   <div class="error-banner" role="alert">
-    <span>{state.error}</span>
+    <span>{sessionState.error}</span>
     <button onclick={clearError}>&times;</button>
   </div>
 {/if}
@@ -65,34 +65,34 @@
   <main class="session-view">
     <TurnIndicator
       currentPlayer={currentPlayer}
-      round={state.turnState?.round ?? 1}
+      round={sessionState.turnState?.round ?? 1}
       {connectionStatus}
     />
 
     <PlayerList
-      players={state.players}
-      isDM={state.isDM}
+      players={sessionState.players}
+      isDM={sessionState.isDM}
       {currentPlayer}
       onRemovePlayer={(playerId) => {
-        if (state.dmToken) removePlayer(state.dmToken, playerId);
+        if (sessionState.dmToken) removePlayer(sessionState.dmToken, playerId);
       }}
       onReorderPlayers={(orderedIds) => {
-        if (state.dmToken) reorderPlayers(state.dmToken, orderedIds);
+        if (sessionState.dmToken) reorderPlayers(sessionState.dmToken, orderedIds);
       }}
     />
 
     <DMToolbar
-      isDM={state.isDM}
-      roomCode={state.roomCode}
-      dmToken={state.dmToken}
+      isDM={sessionState.isDM}
+      roomCode={sessionState.roomCode}
+      dmToken={sessionState.dmToken}
       onAdvanceTurn={() => {
-        if (state.dmToken) advanceTurn(state.dmToken);
+        if (sessionState.dmToken) advanceTurn(sessionState.dmToken);
       }}
       onPreviousTurn={() => {
-        if (state.dmToken) previousTurn(state.dmToken);
+        if (sessionState.dmToken) previousTurn(sessionState.dmToken);
       }}
       onResetSession={() => {
-        if (state.dmToken) resetSession(state.dmToken);
+        if (sessionState.dmToken) resetSession(sessionState.dmToken);
       }}
     />
   </main>

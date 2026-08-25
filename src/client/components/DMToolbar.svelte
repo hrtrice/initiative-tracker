@@ -6,6 +6,7 @@
     onAdvanceTurn,
     onPreviousTurn,
     onResetSession,
+    onAddNpc,
   }: {
     isDM?: boolean;
     roomCode: string | null;
@@ -13,9 +14,13 @@
     onAdvanceTurn?: () => void;
     onPreviousTurn?: () => void;
     onResetSession?: () => void;
+    onAddNpc?: (name: string, initiative: number) => void;
   } = $props();
 
   let copyFeedback = $state("");
+  let npcName = $state("");
+  let npcInitiative = $state("");
+  let npcFeedback = $state("");
 
   let maskedKey = $derived(dmToken ? dmToken.slice(0, 8) + "..." : "");
 
@@ -33,6 +38,22 @@
       }, 1500);
     }
   }
+
+  function handleAddNpc() {
+    const name = npcName.trim();
+    const init = Number(npcInitiative);
+    if (!name || isNaN(init)) {
+      npcFeedback = "Enter a name and initiative";
+      return;
+    }
+    onAddNpc?.(name, init);
+    npcName = "";
+    npcInitiative = "";
+    npcFeedback = "NPC added!";
+    setTimeout(() => {
+      npcFeedback = "";
+    }, 1500);
+  }
 </script>
 
 {#if isDM}
@@ -43,6 +64,29 @@
 
     <div class="admin-key" onclick={() => copyToClipboard(dmToken ?? "", "Admin key")} title="Click to copy">
       {maskedKey}
+    </div>
+
+    <div class="add-npc-section">
+      <h3>Add NPC</h3>
+      <div class="npc-form">
+        <input
+          type="text"
+          bind:value={npcName}
+          placeholder="NPC name"
+          maxlength={20}
+        />
+        <input
+          type="number"
+          bind:value={npcInitiative}
+          placeholder="Init"
+          min={-10}
+          max={30}
+        />
+        <button class="btn-primary" onclick={handleAddNpc}>Add</button>
+      </div>
+      {#if npcFeedback}
+        <p class="npc-feedback">{npcFeedback}</p>
+      {/if}
     </div>
 
     <div class="actions">

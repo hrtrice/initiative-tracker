@@ -51,6 +51,12 @@ export interface ResetSessionPayload {
   dmToken: string;
 }
 
+export interface AddNpcPayload {
+  dmToken: string;
+  name: string;
+  initiative: number;
+}
+
 export interface ClientMessageMap {
   CREATE_SESSION: CreateSessionPayload;
   JOIN_SESSION: JoinSessionPayload;
@@ -62,6 +68,7 @@ export interface ClientMessageMap {
   ADVANCE_TURN: AdvanceTurnPayload;
   PREVIOUS_TURN: PreviousTurnPayload;
   RESET_SESSION: ResetSessionPayload;
+  ADD_NPC: AddNpcPayload;
 }
 
 export type ClientMessage = {

@@ -21,4 +21,4 @@ members:
   - name: devops
     role: "Tests, deployment config, CI/CD, Docker"
     tools: [Read, Write, Edit, Grep, Glob, "Bash(git:*)"]
-    owns: ["tests/**", "Dockerfile", "fly.toml", ".github/**"]
+    owns: ["tests/**", "Dockerfile", "railway.json", ".github/**"]

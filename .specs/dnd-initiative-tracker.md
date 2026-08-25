@@ -19,7 +19,7 @@ Initiative tracking in in-person D&D games is slow and manual. The DM has to ask
 - Players connect on phones/tablets/laptops over the venue's WiFi or internet.
 - **Stable internet assumed.** Can rely on a hosted server — cloud-only architectures are viable.
 - **DM runs from their phone.** Table space for a laptop may be limited. The DM should be able to open a URL on their phone and have full admin control — no laptop required. This means no local-server approach; the app must be always-on and hosted.
-- **Zero run cost at small scale.** Must operate on free-tier hosting (no monthly bills). The app's resource needs are tiny — a single table of ~20 users fits comfortably within Fly.io free tier, Railway free tier, or similar.
+- **Zero run cost at small scale.** Must operate on free-tier hosting (no monthly bills). The app's resource needs are tiny — a single table of ~20 users fits comfortably within Railway free tier.
 - **Latency sensitive.** Order changes must propagate sub-second (<500ms).
 - **Device heterogeneity.** Players use any OS/browser/screen size. UI must be mobile-first, responsive, functional at 320px+ widths.
 - **No app installation.** Pure web — no native install required.
@@ -35,8 +35,8 @@ Initiative tracking in in-person D&D games is slow and manual. The DM has to ask
 - Scale: 1 DM + up to ~20 players. Single room. Tiny state (5-30 entries per session).
 
 **Deployment:**
-- **Always-on hosted.** Must be deployed to a free-tier hosting platform (Fly.io, Railway, or equivalent). The DM opens a URL — no local server, no terminal, no laptop.
-- **Zero cost.** Must stay within free-tier limits: Fly.io free allowance (3 shared-cpu-1x 256MB VMs, 3GB persistent storage) is more than sufficient for a single table.
+- **Always-on hosted.** Must be deployed to a free-tier hosting platform (Railway). The DM opens a URL — no local server, no terminal, no laptop.
+- **Zero cost.** Must stay within free-tier limits: Railway free allowance is more than sufficient for a single table.
 - **CI/CD from GitHub.** Push to main → auto-deploys. The DM never touches infrastructure.
 - **Fallback:** Local dev mode (`npm start` on laptop) for development only.
 
@@ -57,7 +57,7 @@ No existing application code to draw from. However, established patterns inform 
 - **CRDT/OT** is overengineered — DM is the sole mutator, no concurrent edit conflicts.
 
 **Server architecture:**
-- Single-process Node.js with `ws` + Express — serves HTTP (static files) and WebSocket on one port. In-memory state. Express chosen for cleaner static file serving and middleware readability. Simple enough to run locally or deploy to Fly.io/Railway.
+- Single-process Node.js with `ws` + Express — serves HTTP (static files) and WebSocket on one port. In-memory state. Express chosen for cleaner static file serving and middleware readability. Simple enough to run locally or deploy to Railway.
 
 **Existing initiative trackers** (D&D Beyond, Improved Initiative, kobold.club) store a flat array of combatants with `{ id, name, initiative, isEnemy }`. Order is computed server-side as descending initiative. This pattern is proven and should be adopted directly.
 
@@ -81,7 +81,7 @@ No existing application code to draw from. However, established patterns inform 
 │                    │ HTTPS / WSS               │
 │                    ▼                           │
 │          ┌────────────────────────┐            │
-│          │  Fly.io / Railway      │            │
+│          │  Railway               │            │
 │          │  (Node Server)         │            │
 │          │  Session Store         │            │
 │          │  (in-memory)           │            │
@@ -92,7 +92,7 @@ No existing application code to draw from. However, established patterns inform 
 Dev mode: `npm run dev` runs Vite (port 5173) + server (port 3000) locally for development only. Production is always hosted.
 
 **Key design decisions:**
-1. **Hosted server process** — deployed to Fly.io/Railway free tier. Serves SPA + WebSocket on a single public URL.
+1. **Hosted server process** — deployed to Railway free tier. Serves SPA + WebSocket on a single public URL.
 2. **WebSocket as primary transport** — all session state over a single WSS connection. REST only for initial page load and health check.
 3. **In-memory session store** — `Map<string, Session>`. No database. Sessions are ephemeral — this is fine since the app is always-on hosted, and sessions only live as long as a combat encounter.
 4. **No authentication** — 4-digit room code is the access gate. DM identity via a `dmToken` (UUID) stored in sessionStorage.
@@ -243,15 +243,14 @@ Embedded within `Session`. Wraps forward (last -> first, round++) and backward (
 
 **Deployment targets (MVP):**
 - **Local**: DM runs `npm install && npm start` on laptop. Players connect via `http://<laptop-ip>:3000`.
-- **Hosted**: Fly.io (WebSocket-native) or Railway — single `fly deploy` / `railway up`.
+- **Hosted**: Railway — single `railway up`.
 
 **First deploy steps:**
 1. `npm run build` produces static assets in `dist/`
 2. Server serves `dist/` as static files
-3. `fly launch` generates `fly.toml` + `Dockerfile`
-4. `fly deploy` from `main`
+3. Railway auto-detects `Dockerfile` on push to `main`
 
-**Rollback:** Trivial — no database. `git revert && redeploy` or `fly deploy <prev-release>`. Worst case: 5 min downtime.
+**Rollback:** Trivial — no database. `git revert && redeploy`. Worst case: 5 min downtime.
 
 **Backward compatibility:** Not applicable for v1. Future protocol changes should increment a handshake version field.
 

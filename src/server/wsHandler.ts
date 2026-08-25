@@ -94,6 +94,8 @@ export class WsHandler {
           return this.handlePreviousTurn(client, msg.payload);
         case "RESET_SESSION":
           return this.handleResetSession(client, msg.payload);
+        case "ADD_NPC":
+          return this.handleAddNpc(client, msg.payload);
         default:
           this.sendToClient(client.id, {
             type: "ERROR",
@@ -456,6 +458,68 @@ export class WsHandler {
       },
       removedClientId ?? undefined
     );
+  }
+
+  private handleAddNpc(
+    client: WsClient,
+    payload: ClientMessageMap["ADD_NPC"]
+  ): void {
+    const { dmToken, name, initiative } = payload;
+    if (!client.sessionId) {
+      this.sendToClient(client.id, {
+        type: "ERROR",
+        payload: { code: ErrorCode.UNAUTHORIZED, message: "Not in a session" },
+      });
+      return;
+    }
+    const session = this.store.findById(client.sessionId);
+    if (!session) {
+      this.sendToClient(client.id, {
+        type: "ERROR",
+        payload: {
+          code: ErrorCode.SESSION_NOT_FOUND,
+          message: "Session not found",
+        },
+      });
+      return;
+    }
+    if (session.dmToken !== dmToken) {
+      this.sendToClient(client.id, {
+        type: "ERROR",
+        payload: { code: ErrorCode.UNAUTHORIZED, message: "Invalid DM token" },
+      });
+      return;
+    }
+    const npcName = (name || "").trim();
+    if (npcName.length < MIN_NAME_LENGTH || npcName.length > MAX_NAME_LENGTH) {
+      this.sendToClient(client.id, {
+        type: "ERROR",
+        payload: { code: ErrorCode.INVALID_NAME, message: "Invalid name length" },
+      });
+      return;
+    }
+    const init =
+      typeof initiative === "number" ? initiative : Number(initiative);
+    if (isNaN(init) || init < MIN_INITIATIVE || init > MAX_INITIATIVE) {
+      this.sendToClient(client.id, {
+        type: "ERROR",
+        payload: {
+          code: ErrorCode.INVALID_INITIATIVE,
+          message: "Initiative out of range",
+        },
+      });
+      return;
+    }
+    const playerToken = crypto.randomUUID();
+    this.store.addNpc(session, npcName, init, playerToken);
+    this.broadcastToSession(session.id, {
+      type: "SESSION_STATE_SYNC",
+      payload: {
+        players: session.players,
+        turnState: session.turnState,
+        dmPlayerId: client.isDM ? client.playerId : undefined,
+      },
+    });
   }
 
   private handleAdvanceTurn(

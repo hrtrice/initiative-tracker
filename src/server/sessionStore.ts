@@ -24,6 +24,24 @@ export class SessionStore {
     this.clientToPlayer = new Map();
   }
 
+  private ensureCurrentIndexOnNonDM(session: Session): void {
+    if (session.players.length === 0) {
+      session.turnState.currentIndex = 0;
+      return;
+    }
+    let attempts = 0;
+    while (
+      attempts < session.players.length &&
+      session.players[session.turnState.currentIndex]?.isDM
+    ) {
+      session.turnState.currentIndex++;
+      if (session.turnState.currentIndex >= session.players.length) {
+        session.turnState.currentIndex = 0;
+      }
+      attempts++;
+    }
+  }
+
   create(dmToken: string, dmPlayerId: string): Session {
     const id = crypto.randomUUID();
     const code = generateUniqueRoomCode(
@@ -53,6 +71,7 @@ export class SessionStore {
       createdAt: now,
     };
     session.players.push(dmPlayer);
+    this.ensureCurrentIndexOnNonDM(session);
     this.sessions.set(id, session);
     this.sessionsByCode.set(code, session);
     return session;
@@ -82,6 +101,7 @@ export class SessionStore {
     }
     player.sortOrder = session.players.length;
     session.players.push(player);
+    this.ensureCurrentIndexOnNonDM(session);
     session.lastActivityAt = Date.now();
   }
 
@@ -97,6 +117,7 @@ export class SessionStore {
     session.players.forEach((p, i) => {
       p.sortOrder = i;
     });
+    this.ensureCurrentIndexOnNonDM(session);
     session.lastActivityAt = Date.now();
   }
 
@@ -145,26 +166,63 @@ export class SessionStore {
 
   advanceTurn(session: Session): void {
     if (session.players.length === 0) return;
-    session.turnState.currentIndex++;
-    if (session.turnState.currentIndex >= session.players.length) {
-      session.turnState.currentIndex = 0;
-      session.turnState.round++;
-    }
+    const nonDMs = session.players.filter((p) => !p.isDM);
+    if (nonDMs.length === 0) return;
+    let attempts = 0;
+    do {
+      session.turnState.currentIndex++;
+      if (session.turnState.currentIndex >= session.players.length) {
+        session.turnState.currentIndex = 0;
+        session.turnState.round++;
+      }
+      attempts++;
+    } while (
+      attempts <= session.players.length &&
+      session.players[session.turnState.currentIndex]?.isDM
+    );
     session.lastActivityAt = Date.now();
   }
 
   previousTurn(session: Session): void {
     if (session.players.length === 0) return;
-    session.turnState.currentIndex--;
-    if (session.turnState.currentIndex < 0) {
-      session.turnState.currentIndex = session.players.length - 1;
-      session.turnState.round = Math.max(1, session.turnState.round - 1);
-    }
+    const nonDMs = session.players.filter((p) => !p.isDM);
+    if (nonDMs.length === 0) return;
+    let attempts = 0;
+    do {
+      session.turnState.currentIndex--;
+      if (session.turnState.currentIndex < 0) {
+        session.turnState.currentIndex = session.players.length - 1;
+        session.turnState.round = Math.max(1, session.turnState.round - 1);
+      }
+      attempts++;
+    } while (
+      attempts <= session.players.length &&
+      session.players[session.turnState.currentIndex]?.isDM
+    );
     session.lastActivityAt = Date.now();
+  }
+
+  addNpc(session: Session, name: string, initiative: number, playerToken: string): Player {
+    const player: Player = {
+      id: crypto.randomUUID(),
+      sessionId: session.id,
+      name,
+      initiative,
+      sortOrder: session.players.length,
+      isDM: false,
+      clientId: null,
+      playerToken,
+      createdAt: Date.now(),
+    };
+    session.players.push(player);
+    this.ensureCurrentIndexOnNonDM(session);
+    session.lastActivityAt = Date.now();
+    return player;
   }
 
   reset(session: Session): void {
     session.turnState = { currentIndex: 0, round: 1 };
+    this.ensureCurrentIndexOnNonDM(session);
     session.status = "WAITING";
     session.lastActivityAt = Date.now();
   }

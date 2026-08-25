@@ -15,7 +15,7 @@
     onReorderPlayers?: (orderedPlayerIds: string[]) => void;
   } = $props();
 
-  let sorted = $derived([...players].sort((a, b) => a.sortOrder - b.sortOrder));
+  let sorted = $derived([...players].filter((p) => !p.isDM).sort((a, b) => a.sortOrder - b.sortOrder));
 
   function moveUp(index: number) {
     if (index === 0) return;

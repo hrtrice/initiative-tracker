@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { createSessionState } from "./hooks/useSession.svelte";
-  import { createTurnDerived } from "./hooks/useTurnState.svelte";
   import Lobby from "./components/Lobby.svelte";
   import PlayerList from "./components/PlayerList.svelte";
   import TurnIndicator from "./components/TurnIndicator.svelte";
@@ -9,7 +8,6 @@
 
   const {
     state: sessionState,
-    connectionStatus,
     createSession,
     joinSession,
     reconnectSession,
@@ -20,14 +18,15 @@
     advanceTurn,
     previousTurn,
     resetSession,
+    addNpc,
     clearError,
     disconnect,
   } = createSessionState();
 
-  const { currentPlayer, isWrapping } = createTurnDerived(
-    () => sessionState.players,
-    () => sessionState.turnState,
-  );
+  let currentPlayer = $derived.by(() => {
+    if (!sessionState.turnState) return null;
+    return sessionState.players[sessionState.turnState.currentIndex] ?? null;
+  });
 
   let view = $state<"lobby" | "session">("lobby");
 
@@ -60,13 +59,13 @@
 {/if}
 
 {#if view === "lobby"}
-  <Lobby {createSession} {joinSession} {connectionStatus} />
+  <Lobby {createSession} {joinSession} connectionStatus={sessionState.connectionStatus} />
 {:else}
   <main class="session-view">
     <TurnIndicator
       currentPlayer={currentPlayer}
       round={sessionState.turnState?.round ?? 1}
-      {connectionStatus}
+      connectionStatus={sessionState.connectionStatus}
     />
 
     <PlayerList
@@ -93,6 +92,9 @@
       }}
       onResetSession={() => {
         if (sessionState.dmToken) resetSession(sessionState.dmToken);
+      }}
+      onAddNpc={(name, initiative) => {
+        if (sessionState.dmToken) addNpc(sessionState.dmToken, name, initiative);
       }}
     />
   </main>

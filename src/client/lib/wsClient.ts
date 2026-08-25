@@ -1,4 +1,5 @@
 import type { ClientMessage, ServerMessage } from "@shared/messages";
+import { ErrorCode } from "@shared/constants";
 
 type MessageHandler = (msg: ServerMessage) => void;
 type StatusHandler = (status: ConnectionStatus) => void;
@@ -79,6 +80,9 @@ export class WsClient {
     if (this.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
       this.ws = null;
       this.setStatus("disconnected");
+      this.messageHandlers.forEach((h) =>
+        h({ type: "ERROR", payload: { code: ErrorCode.UNKNOWN_ERROR, message: "Could not connect to server. Please check your connection and try again." } })
+      );
       return;
     }
 

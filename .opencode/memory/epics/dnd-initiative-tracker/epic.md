@@ -205,7 +205,7 @@
     - depends-on: 4, 6, 13, 24
     - agent: general
 
-29. **Create `fly.toml`** — Fly.io config
+29. **Create `railway.json`** — Railway config
     - source: spike-5
     - confidence: CONFIRMED
     - priority: P1
@@ -340,7 +340,7 @@
 | 26 | Create manifest.json | P1 | open | general |
 | 27 | Create sw.js | P1 | open | general |
 | 28 | Create Dockerfile | P1 | open | general |
-| 29 | Create fly.toml | P1 | open | general |
+| 29 | Create railway.json | P1 | open | general |
 | 30 | Create deploy.yml | P1 | open | general |
 | 31 | Create vitest.config.ts | P1 | open | general |
 | 32 | Create roomCode.test.ts | P1 | open | general |
@@ -362,5 +362,5 @@ Layer 0 (shared contracts) → Layer 1 (scaffold) → Layer 2 (server) OR Layer 
 ## Parallel Opportunities
 
 - **Layer 2 (server) and Layer 3 (client):** Full parallelism — no shared files between src/server/ and src/client/. Both depend only on shared contracts + scaffold.
-- **Layer 4 items:** manifest.json + sw.js are independent of Dockerfile + fly.toml + deploy.yml.
+- **Layer 4 items:** manifest.json + sw.js are independent of Dockerfile + railway.json + deploy.yml.
 - **Layer 5 items:** Unit tests (items 31-34, 39-40) are independent of e2e tests (items 35-38, 41-42).

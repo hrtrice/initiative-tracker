@@ -1,4 +1,5 @@
-import { WsClient, type ConnectionStatus } from "../lib/wsClient";
+import { WsClient } from "../lib/wsClient";
+import type { ConnectionStatus } from "../lib/wsClient";
 import type { SessionState } from "../lib/types";
 import type { ServerMessage } from "@shared/messages";
 
@@ -15,9 +16,8 @@ export function createSessionState() {
     playerToken: null,
     dmToken: null,
     error: null,
+    connectionStatus: "disconnected" as ConnectionStatus,
   });
-
-  let connectionStatus = $state<ConnectionStatus>("disconnected");
 
   function handleMessage(msg: ServerMessage) {
     switch (msg.type) {
@@ -74,15 +74,12 @@ export function createSessionState() {
 
   wsClient.onMessage(handleMessage);
   wsClient.onStatusChange((s) => {
-    connectionStatus = s;
+    state.connectionStatus = s;
   });
 
   return {
     get state() {
       return state;
-    },
-    get connectionStatus() {
-      return connectionStatus;
     },
     createSession: () => {
       wsClient.connect("", undefined, true);
@@ -119,6 +116,9 @@ export function createSessionState() {
     },
     resetSession: (dmToken: string) => {
       wsClient.send({ type: "RESET_SESSION", payload: { dmToken } });
+    },
+    addNpc: (dmToken: string, name: string, initiative: number) => {
+      wsClient.send({ type: "ADD_NPC", payload: { dmToken, name, initiative } });
     },
     clearError: () => {
       state.error = null;

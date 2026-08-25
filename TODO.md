@@ -84,10 +84,10 @@
   - agent: general — SW file. Requires: service worker caching strategies.
 - [ ] P1: Create `Dockerfile` — multi-stage Node.js build, dist/ served on port 3000
   - agent: general — Docker config. Requires: multi-stage Dockerfile conventions.
-- [ ] P1: Create `fly.toml` — internal_port 3000, shared-cpu-1x 256MB
-  - agent: general — Fly.io config. Requires: fly.toml format.
-- [ ] P1: Create `.github/workflows/deploy.yml` — push to main -> fly deploy
-  - agent: general — CI config. Requires: GitHub Actions, fly deploy action.
+- [ ] P1: Create `railway.json` — build (Dockerfile) + deploy (healthcheck, restart policy)
+  - agent: general — Railway config. Requires: railway.json format.
+- [ ] P1: Create `.github/workflows/deploy.yml` — push to main -> railway deploy
+  - agent: general — CI config. Requires: GitHub Actions, railway deploy action.
 
 ### Layer 5: Tests (depends on Layer 2-4, ~2 sessions)
 - [ ] P1: Create `tests/vitest.config.ts`

@@ -11,12 +11,22 @@
     round?: number;
     connectionStatus?: ConnectionStatus;
   } = $props();
+
+  let hasConnected = $state(false);
+
+  $effect(() => {
+    if (connectionStatus === "connected") {
+      hasConnected = true;
+    }
+  });
 </script>
 
-{#if connectionStatus === "reconnecting"}
-  <div class="reconnect-banner">Connection lost. Reconnecting...</div>
-{:else if connectionStatus === "disconnected"}
-  <div class="reconnect-banner">Disconnected. Please check your connection.</div>
+{#if hasConnected}
+  {#if connectionStatus === "reconnecting"}
+    <div class="reconnect-banner">Connection lost. Reconnecting...</div>
+  {:else if connectionStatus === "disconnected"}
+    <div class="reconnect-banner">Disconnected. Please check your connection.</div>
+  {/if}
 {/if}
 
 <div class="turn-indicator card">

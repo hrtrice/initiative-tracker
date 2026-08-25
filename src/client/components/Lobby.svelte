@@ -13,7 +13,6 @@
     connectionStatus: ConnectionStatus;
   } = $props();
 
-  let mode = $state<"create" | "join">("create");
   let roomCode = $state("");
   let roomCodeError = $state("");
 
@@ -31,52 +30,35 @@
 <div class="lobby">
   <h1>Initiative Tracker</h1>
 
-  <div class="mode-toggle">
+  <div class="create-section">
     <button
-      class="btn-secondary"
-      class:active={mode === "create"}
-      onclick={() => mode = "create"}
+      class="btn-primary"
+      onclick={createSession}
+      disabled={connectionStatus === "connecting"}
     >
-      Create Session
-    </button>
-    <button
-      class="btn-secondary"
-      class:active={mode === "join"}
-      onclick={() => mode = "join"}
-    >
-      Join Session
+      {connectionStatus === "connecting" ? "Connecting..." : "Create New Session"}
     </button>
   </div>
 
-  {#if mode === "create"}
-    <div class="create-section">
-      <button
-        class="btn-primary"
-        onclick={createSession}
-        disabled={connectionStatus === "connecting"}
-      >
-        {connectionStatus === "connecting" ? "Connecting..." : "Create New Session"}
-      </button>
-    </div>
-  {:else}
-    <div class="join-section card">
-      <div class="form-group">
-        <label for="roomCode">Room Code</label>
-        <input
-          id="roomCode"
-          type="text"
-          bind:value={roomCode}
-          placeholder="Enter 4-digit code"
-          maxlength={ROOM_CODE_LENGTH}
-          style="text-transform: uppercase; letter-spacing: 0.25em; font-family: var(--font-mono); text-align: center; font-size: 1.25rem;"
-          autocomplete="off"
-        />
-        {#if roomCodeError}
-          <p class="field-error">{roomCodeError}</p>
-        {/if}
-      </div>
+  <hr />
 
-      <PlayerEntry onsubmit={handleJoin} />
+  <div class="join-section card">
+    <div class="form-group">
+      <label for="roomCode">Room Code</label>
+      <input
+        id="roomCode"
+        type="text"
+        bind:value={roomCode}
+        placeholder="Enter 4-digit code"
+        maxlength={ROOM_CODE_LENGTH}
+        style="text-transform: uppercase; letter-spacing: 0.25em; font-family: var(--font-mono); text-align: center; font-size: 1.25rem;"
+        autocomplete="off"
+      />
+      {#if roomCodeError}
+        <p class="field-error">{roomCodeError}</p>
+      {/if}
     </div>
-  {/if}
+
+    <PlayerEntry onsubmit={handleJoin} />
+  </div>
 </div>

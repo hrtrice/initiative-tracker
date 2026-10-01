@@ -101,13 +101,15 @@ Order: **Phase 0**, then **Phases 1 and 2 in parallel**, then **Phase 3**. Phase
 - The Playwright specs in `tests/e2e/` still target the old behavior and aren't in CI. T8 rewrites them.
 
 ### Phase 3: Spec features that are missing
-- [ ] **T7. Finish the DM and player controls** (#14, #15, #22)
-  - DM can edit a player's initiative inline (wire up the `updateInitiative` that already exists).
-  - "Recover as DM" form in the lobby (room code and Admin Key), with a `localStorage` fallback.
-  - Leave Session button.
-  - **Decided:** Reset starts a new combat (round 1, back at the top). *Still open:* whether players stay in the room for the new combat and re-enter their initiative, or have to rejoin.
-  - Use the shared constants in the NPC form, and show readable error messages.
-  - **Done when:** the spec's acceptance criteria for editing, recovery and reset pass in e2e.
+- [x] **T7. Finish the DM and player controls** (#14, #15, #22)
+  - The DM taps any initiative to edit it inline. Enter or tapping away saves, Escape cancels, and the entry moves into place for everyone.
+  - **New combat** (was Reset, now asks for confirmation): NPCs from the last fight are removed, players stay with their initiative cleared ("—"), and the turn goes back to round 1 at the top. Each player gets a "Roll initiative" prompt and submits their own roll (`SUBMIT_INITIATIVE`). This only works while their roll is pending; after that, only the DM can change it. Players still pending sort at the bottom, below any new NPCs.
+  - **Rejoin as DM** in the lobby (room code and Admin Key). The toolbar now says what the Admin Key is for. Wrong keys show the server's reason ("That Admin Key doesn't match this session").
+  - Credentials are written to both `sessionStorage` (this tab) and `localStorage` (the fallback), so reopening a closed tab restores the DM or player.
+  - **Leave session:** a player leaving is removed and their name is freed to rejoin. The DM leaving only detaches that device; the session keeps running and can be recovered with the Admin Key.
+  - Initiative validation no longer treats a blank or `null` value as 0.
+  - The room code and Admin Key are now buttons, and `PlayerEntry`'s unused "edit existing player" mode is gone, so `svelte-check` reports 0 warnings.
+  - Verified with 89 unit tests and a 22-check browser run (plus a rerun of the 28-check Phase 1–2 browser run).
 
 ### Phase 4: Dev experience and polish
 - [ ] **T8. Get `npm run dev` and the e2e suite working** (#16)
@@ -126,7 +128,7 @@ Order: **Phase 0**, then **Phases 1 and 2 in parallel**, then **Phase 3**. Phase
 ### Decisions (2026-10-01)
 1. **Host:** Railway, on a paid account.
 2. **DM:** not in the player list. The DM runs the NPCs' turns.
-3. **Reset:** starts a new combat. **Next** after the last entry loops back to the top.
+3. **Reset:** starts a new combat. Players stay and re-enter their initiative; the last fight's NPCs are removed. **Next** after the last entry loops back to the top.
 
 ### Open questions
-- On Reset, do players stay in the room and re-enter their initiative, or do they rejoin? Needed before T7.
+- None right now.

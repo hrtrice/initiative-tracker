@@ -1,4 +1,5 @@
 import { WsClient } from "../lib/wsClient";
+import { reloadIfOutdated } from "../lib/updateCheck";
 import type { ConnectionStatus } from "../lib/wsClient";
 import type { CustomFieldType, FieldValue, SessionState } from "../lib/types";
 import type { ClientMessage, ServerMessage } from "@shared/messages";
@@ -198,14 +199,20 @@ export function createSessionState() {
   }
 
   wsClient.onMessage(handleMessage);
-  wsClient.onOpen(rebind);
+  wsClient.onOpen(() => {
+    rebind();
+    // A (re)connect is the moment a deploy becomes visible: pick up the new build.
+    void reloadIfOutdated();
+  });
   wsClient.onStatusChange((s) => {
     state.connectionStatus = s;
   });
 
   // Phones drop sockets when the screen locks; reconnect as soon as the page is back.
   const resume = () => {
-    if (document.visibilityState === "visible" && loadCredentials()) wsClient.connect();
+    if (document.visibilityState !== "visible") return;
+    void reloadIfOutdated();
+    if (loadCredentials()) wsClient.connect();
   };
   document.addEventListener("visibilitychange", resume);
   window.addEventListener("online", resume);

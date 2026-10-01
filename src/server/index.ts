@@ -15,7 +15,19 @@ const store = new SessionStore();
 const wsHandler = new WsHandler(store);
 
 // Only the client build is public; the server bundle lives next to it in dist/server.
-app.use(express.static("dist/client"));
+// Entry points (index.html, sw.js, version.json, manifest) must be revalidated on every
+// load so phones pick up a deploy; Vite's hashed /assets files never change in place.
+app.use(
+  express.static("dist/client", {
+    setHeaders(res, filePath) {
+      if (/[\\/]assets[\\/]/.test(filePath)) {
+        res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+      } else {
+        res.setHeader("Cache-Control", "no-cache");
+      }
+    },
+  })
+);
 
 app.get("/health", (_req, res) => {
   res.json({

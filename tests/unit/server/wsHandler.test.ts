@@ -318,6 +318,85 @@ describe("WsHandler", () => {
     });
   });
 
+  describe("custom fields", () => {
+    function fieldsSetup() {
+      const s = createSession();
+      const a = join(s.roomCode, "Aragorn", 15);
+      const g = join(s.roomCode, "Gimli", 8);
+      s.dm.send({ type: "ADD_FIELD", payload: { dmToken: s.dmToken, name: "AC", type: "number" } });
+      const added = s.dm.last();
+      if (added.type !== "FIELDS_UPDATED") throw new Error(JSON.stringify(added));
+      return { ...s, a, g, acId: added.payload.customFields[0]!.id };
+    }
+    const fieldsOf = (msg: ServerMessage, name: string) =>
+      msg.type === "FIELDS_UPDATED" ? msg.payload.players.find((p) => p.name === name)?.fields : undefined;
+
+    it("only the DM can add, rename or remove fields, and everyone gets the new list", () => {
+      const { dm, dmToken, a, acId } = fieldsSetup();
+      expect(a.tab.last()).toMatchObject({
+        type: "FIELDS_UPDATED",
+        payload: { customFields: [{ id: acId, name: "AC", type: "number" }] },
+      });
+
+      a.tab.send({ type: "ADD_FIELD", payload: { dmToken, name: "PP", type: "number" } });
+      expect(a.tab.last()).toMatchObject({ type: "ERROR", payload: { code: ErrorCode.UNAUTHORIZED } });
+
+      dm.send({ type: "UPDATE_FIELD", payload: { dmToken, fieldId: acId, name: "Armor Class" } });
+      expect(a.tab.last()).toMatchObject({ payload: { customFields: [{ name: "Armor Class" }] } });
+      dm.send({ type: "REMOVE_FIELD", payload: { dmToken, fieldId: acId } });
+      expect(a.tab.last()).toMatchObject({ type: "FIELDS_UPDATED", payload: { customFields: [] } });
+    });
+
+    it("players set their own values, which everyone can see", () => {
+      const { dm, a, g, acId } = fieldsSetup();
+      a.tab.send({ type: "SET_MY_FIELD", payload: { fieldId: acId, value: 16 } });
+      expect(fieldsOf(dm.last(), "Aragorn")).toEqual({ [acId]: 16 });
+      expect(fieldsOf(g.tab.last(), "Aragorn")).toEqual({ [acId]: 16 });
+    });
+
+    it("players can't set anyone else's values", () => {
+      const { dmToken, a, g, acId } = fieldsSetup();
+      a.tab.send({
+        type: "SET_FIELD_VALUE",
+        payload: { dmToken, playerId: g.playerId, fieldId: acId, value: 1 },
+      });
+      expect(a.tab.last()).toMatchObject({ type: "ERROR", payload: { code: ErrorCode.UNAUTHORIZED } });
+    });
+
+    it("the DM sets anyone's values; NPC values reach only the DM", () => {
+      const { dm, dmToken, a, g, acId } = fieldsSetup();
+      dm.send({ type: "ADD_NPC", payload: { dmToken, name: "Goblin", initiative: 12 } });
+      const joined = dm.last();
+      if (joined.type !== "PLAYER_JOINED") throw new Error("expected PLAYER_JOINED");
+      const goblinId = joined.payload.players.find((p) => p.name === "Goblin")!.id;
+
+      dm.send({ type: "SET_FIELD_VALUE", payload: { dmToken, playerId: goblinId, fieldId: acId, value: 13 } });
+      dm.send({ type: "SET_FIELD_VALUE", payload: { dmToken, playerId: g.playerId, fieldId: acId, value: 18 } });
+      expect(fieldsOf(dm.last(), "Goblin")).toEqual({ [acId]: 13 });
+      expect(fieldsOf(a.tab.last(), "Goblin")).toEqual({});
+      expect(fieldsOf(a.tab.last(), "Gimli")).toEqual({ [acId]: 18 });
+      // Nothing a player received ever carried the NPC's value.
+      expect(JSON.stringify(a.tab.received())).not.toMatch(/:13\b/);
+    });
+
+    it("invalid values are rejected with a readable error", () => {
+      const { a, acId } = fieldsSetup();
+      a.tab.send({ type: "SET_MY_FIELD", payload: { fieldId: acId, value: "lots" } });
+      expect(a.tab.last()).toMatchObject({ type: "ERROR", payload: { code: ErrorCode.INVALID_FIELD } });
+    });
+
+    it("a reconnecting player gets the field list and values", () => {
+      const { roomCode, a, acId } = fieldsSetup();
+      a.tab.send({ type: "SET_MY_FIELD", payload: { fieldId: acId, value: 16 } });
+      const tab2 = connect();
+      tab2.send({ type: "RECONNECT_SESSION", payload: { roomCode, playerToken: a.playerToken } });
+      expect(tab2.last()).toMatchObject({
+        type: "SESSION_STATE_SYNC",
+        payload: { customFields: [{ id: acId, name: "AC" }] },
+      });
+    });
+  });
+
   describe("sweepExpiredSessions", () => {
     it("evicts idle sessions nobody is connected to", () => {
       const { dm, sessionId } = createSession();

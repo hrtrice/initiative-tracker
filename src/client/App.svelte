@@ -5,6 +5,7 @@
   import TurnIndicator from "./components/TurnIndicator.svelte";
   import DMToolbar from "./components/DMToolbar.svelte";
   import InitiativePrompt from "./components/InitiativePrompt.svelte";
+  import CustomFieldsManager from "./components/CustomFieldsManager.svelte";
 
   const {
     state: sessionState,
@@ -17,6 +18,10 @@
     resetSession,
     addNpc,
     updateInitiative,
+    addField,
+    updateField,
+    removeField,
+    setFieldValue,
     recoverAsDm,
     submitInitiative,
     leaveSession,
@@ -71,6 +76,8 @@
       onRemovePlayer={removePlayer}
       onReorderPlayers={reorderPlayers}
       onUpdateInitiative={updateInitiative}
+      customFields={sessionState.customFields}
+      onSetFieldValue={setFieldValue}
     />
 
     <DMToolbar
@@ -82,6 +89,15 @@
       onResetSession={resetSession}
       onAddNpc={addNpc}
     />
+
+    {#if sessionState.isDM}
+      <CustomFieldsManager
+        fields={sessionState.customFields}
+        onAdd={addField}
+        onUpdate={updateField}
+        onRemove={removeField}
+      />
+    {/if}
 
     <div class="leave-row">
       <button class="btn-ghost" onclick={confirmLeave}>Leave session</button>

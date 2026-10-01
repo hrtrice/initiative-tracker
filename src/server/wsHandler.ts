@@ -7,6 +7,17 @@ import type { ClientMessage, ClientMessageMap, ServerMessage } from "../shared/m
 import { ErrorCode, WS_CLOSE_REMOVED } from "../shared/constants";
 import type { Player, Session } from "../shared/types";
 
+/** Broadcasts whose payload is exactly a session snapshot. */
+type SnapshotMessageType =
+  | "PLAYER_JOINED"
+  | "INITIATIVE_UPDATED"
+  | "PLAYERS_REORDERED"
+  | "PLAYER_REMOVED"
+  | "TURN_ADVANCED"
+  | "TURN_REGRESSED"
+  | "SESSION_RESET"
+  | "FIELDS_UPDATED";
+
 export interface WsClient {
   ws: WebSocket;
   id: string;
@@ -84,6 +95,16 @@ export class WsHandler {
           return this.handleSubmitInitiative(client, msg.payload);
         case "LEAVE_SESSION":
           return this.handleLeaveSession(client);
+        case "ADD_FIELD":
+          return this.handleAddField(client, msg.payload);
+        case "UPDATE_FIELD":
+          return this.handleUpdateField(client, msg.payload);
+        case "REMOVE_FIELD":
+          return this.handleRemoveField(client, msg.payload);
+        case "SET_FIELD_VALUE":
+          return this.handleSetFieldValue(client, msg.payload);
+        case "SET_MY_FIELD":
+          return this.handleSetMyField(client, msg.payload);
         default:
           this.sendError(client.id, ErrorCode.UNKNOWN_ERROR, "Unknown message type");
       }
@@ -103,7 +124,7 @@ export class WsHandler {
     this.store.bindClient(client.id, session, null);
     this.send(client.id, {
       type: "SESSION_CREATED",
-      payload: { sessionId: session.id, roomCode: session.roomCode, dmToken, ...snapshot(session) },
+      payload: { sessionId: session.id, roomCode: session.roomCode, dmToken, ...snapshot(session, true) },
     });
   }
 
@@ -116,6 +137,7 @@ export class WsHandler {
       name: validateName(payload.characterName),
       initiative: validateInitiative(payload.initiative),
       isNpc: false,
+      fields: {},
       clientId: null,
       playerToken,
       createdAt: Date.now(),
@@ -129,10 +151,10 @@ export class WsHandler {
         roomCode: session.roomCode,
         playerId: player.id,
         playerToken,
-        ...snapshot(session),
+        ...snapshot(session, false),
       },
     });
-    this.broadcast(session.id, { type: "PLAYER_JOINED", payload: snapshot(session) }, client.id);
+    this.broadcastSnapshot(session, "PLAYER_JOINED", client.id);
   }
 
   private handleReconnectSession(
@@ -168,7 +190,7 @@ export class WsHandler {
   ): void {
     const session = this.requireDm(client, payload.dmToken);
     this.store.updateInitiative(session, payload.playerId, payload.initiative);
-    this.broadcast(session.id, { type: "INITIATIVE_UPDATED", payload: snapshot(session) });
+    this.broadcastSnapshot(session, "INITIATIVE_UPDATED");
   }
 
   private handleReorderPlayers(
@@ -177,7 +199,7 @@ export class WsHandler {
   ): void {
     const session = this.requireDm(client, payload.dmToken);
     this.store.reorderPlayers(session, payload.orderedPlayerIds);
-    this.broadcast(session.id, { type: "PLAYERS_REORDERED", payload: snapshot(session) });
+    this.broadcastSnapshot(session, "PLAYERS_REORDERED");
   }
 
   private handleRemovePlayer(client: WsClient, payload: ClientMessageMap["REMOVE_PLAYER"]): void {
@@ -187,13 +209,13 @@ export class WsHandler {
       this.send(removed.clientId, { type: "YOU_WERE_REMOVED", payload: {} });
       this.clients.get(removed.clientId)?.ws.close(WS_CLOSE_REMOVED, "Removed from session");
     }
-    this.broadcast(session.id, { type: "PLAYER_REMOVED", payload: snapshot(session) });
+    this.broadcastSnapshot(session, "PLAYER_REMOVED");
   }
 
   private handleAddNpc(client: WsClient, payload: ClientMessageMap["ADD_NPC"]): void {
     const session = this.requireDm(client, payload.dmToken);
     this.store.addNpc(session, validateName(payload.name), validateInitiative(payload.initiative));
-    this.broadcast(session.id, { type: "PLAYER_JOINED", payload: snapshot(session) });
+    this.broadcastSnapshot(session, "PLAYER_JOINED");
   }
 
   private handleSubmitInitiative(
@@ -202,7 +224,7 @@ export class WsHandler {
   ): void {
     const { session, playerId } = this.requirePlayer(client);
     this.store.submitInitiative(session, playerId, payload.initiative);
-    this.broadcast(session.id, { type: "INITIATIVE_UPDATED", payload: snapshot(session) });
+    this.broadcastSnapshot(session, "INITIATIVE_UPDATED");
   }
 
   /** A player leaving frees their name; the DM leaving just detaches this connection. */
@@ -215,7 +237,42 @@ export class WsHandler {
       return;
     }
     this.store.removePlayer(session, binding.playerId);
-    this.broadcast(session.id, { type: "PLAYER_REMOVED", payload: snapshot(session) });
+    this.broadcastSnapshot(session, "PLAYER_REMOVED");
+  }
+
+  private handleAddField(client: WsClient, payload: ClientMessageMap["ADD_FIELD"]): void {
+    const session = this.requireDm(client, payload.dmToken);
+    this.store.addField(session, payload.name, payload.type);
+    this.broadcastSnapshot(session, "FIELDS_UPDATED");
+  }
+
+  private handleUpdateField(client: WsClient, payload: ClientMessageMap["UPDATE_FIELD"]): void {
+    const session = this.requireDm(client, payload.dmToken);
+    this.store.updateField(session, payload.fieldId, { name: payload.name, type: payload.type });
+    this.broadcastSnapshot(session, "FIELDS_UPDATED");
+  }
+
+  private handleRemoveField(client: WsClient, payload: ClientMessageMap["REMOVE_FIELD"]): void {
+    const session = this.requireDm(client, payload.dmToken);
+    this.store.removeField(session, payload.fieldId);
+    this.broadcastSnapshot(session, "FIELDS_UPDATED");
+  }
+
+  /** The DM can set anyone's values, NPCs included. */
+  private handleSetFieldValue(
+    client: WsClient,
+    payload: ClientMessageMap["SET_FIELD_VALUE"]
+  ): void {
+    const session = this.requireDm(client, payload.dmToken);
+    this.store.setFieldValue(session, payload.playerId, payload.fieldId, payload.value);
+    this.broadcastSnapshot(session, "FIELDS_UPDATED");
+  }
+
+  /** Players can only set values on their own character. */
+  private handleSetMyField(client: WsClient, payload: ClientMessageMap["SET_MY_FIELD"]): void {
+    const { session, playerId } = this.requirePlayer(client);
+    this.store.setFieldValue(session, playerId, payload.fieldId, payload.value);
+    this.broadcastSnapshot(session, "FIELDS_UPDATED");
   }
 
   private handleTurnCommand(
@@ -227,7 +284,7 @@ export class WsHandler {
     if (reply === "TURN_ADVANCED") this.store.advanceTurn(session);
     else if (reply === "TURN_REGRESSED") this.store.previousTurn(session);
     else this.store.reset(session);
-    this.broadcast(session.id, { type: reply, payload: snapshot(session) });
+    this.broadcastSnapshot(session, reply);
   }
 
   private findSession(roomCode: unknown): Session {
@@ -298,16 +355,24 @@ export class WsHandler {
         roomCode: session.roomCode,
         isDM: playerId === null,
         playerId,
-        ...snapshot(session),
+        ...snapshot(session, playerId === null),
       },
     });
   }
 
-  private broadcast(sessionId: string, message: ServerMessage, excludeClientId?: string): void {
+  /**
+   * Sends every connection in the session its own view of the state: the DM sees
+   * NPC custom field values, players don't.
+   */
+  private broadcastSnapshot(
+    session: Session,
+    type: SnapshotMessageType,
+    excludeClientId?: string
+  ): void {
     for (const id of this.clients.keys()) {
-      if (id !== excludeClientId && this.store.getBinding(id)?.sessionId === sessionId) {
-        this.send(id, message);
-      }
+      const binding = this.store.getBinding(id);
+      if (id === excludeClientId || binding?.sessionId !== session.id) continue;
+      this.send(id, { type, payload: snapshot(session, binding.playerId === null) } as ServerMessage);
     }
   }
 

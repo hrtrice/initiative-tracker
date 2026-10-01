@@ -1,5 +1,13 @@
 import crypto from "crypto";
-import type { Session, Player, PlayerView, TurnState } from "../shared/types";
+import type {
+  CustomField,
+  CustomFieldType,
+  FieldValue,
+  Player,
+  PlayerView,
+  Session,
+  TurnState,
+} from "../shared/types";
 import {
   MAX_PLAYERS,
   SESSION_EXPIRY_MS,
@@ -7,6 +15,11 @@ import {
   MAX_INITIATIVE,
   MIN_NAME_LENGTH,
   MAX_NAME_LENGTH,
+  MAX_CUSTOM_FIELDS,
+  MAX_FIELD_NAME_LENGTH,
+  MAX_FIELD_TEXT_LENGTH,
+  MIN_FIELD_NUMBER,
+  MAX_FIELD_NUMBER,
   ErrorCode,
 } from "../shared/constants";
 import { generateUniqueRoomCode } from "./roomCode";
@@ -18,12 +31,76 @@ interface ClientBinding {
   playerId: string | null;
 }
 
-export function toPlayerView(p: Player): PlayerView {
-  return { id: p.id, name: p.name, initiative: p.initiative, isNpc: p.isNpc };
+/** NPC custom field values (AC etc.) are only ever sent to the DM. */
+export function toPlayerView(p: Player, viewerIsDM: boolean): PlayerView {
+  return {
+    id: p.id,
+    name: p.name,
+    initiative: p.initiative,
+    isNpc: p.isNpc,
+    fields: p.isNpc && !viewerIsDM ? {} : { ...p.fields },
+  };
 }
 
-export function snapshot(session: Session): { players: PlayerView[]; turnState: TurnState } {
-  return { players: session.players.map(toPlayerView), turnState: { ...session.turnState } };
+export interface SessionSnapshot {
+  players: PlayerView[];
+  turnState: TurnState;
+  customFields: CustomField[];
+}
+
+/** What one viewer may see of the session. Broadcasts build this per recipient. */
+export function snapshot(session: Session, viewerIsDM: boolean): SessionSnapshot {
+  return {
+    players: session.players.map((p) => toPlayerView(p, viewerIsDM)),
+    turnState: { ...session.turnState },
+    customFields: session.customFields.map((f) => ({ ...f })),
+  };
+}
+
+function validateFieldName(raw: unknown): string {
+  const name = typeof raw === "string" ? raw.trim() : "";
+  if (name.length < 1 || name.length > MAX_FIELD_NAME_LENGTH) {
+    throw new ServerError(
+      ErrorCode.INVALID_FIELD,
+      `Field names must be 1-${MAX_FIELD_NAME_LENGTH} characters`
+    );
+  }
+  return name;
+}
+
+function validateFieldType(raw: unknown): CustomFieldType {
+  if (raw !== "number" && raw !== "text") {
+    throw new ServerError(ErrorCode.INVALID_FIELD, "Field type must be Number or Text");
+  }
+  return raw;
+}
+
+/**
+ * Normalizes a value for a field, or returns null for "no value" (null, blank).
+ * Numbers must be whole numbers in range; text is trimmed and length-capped.
+ */
+export function validateFieldValue(field: CustomField, raw: unknown): FieldValue | null {
+  if (raw === null || raw === undefined || (typeof raw === "string" && raw.trim() === "")) {
+    return null;
+  }
+  if (field.type === "number") {
+    const n = typeof raw === "number" ? raw : typeof raw === "string" ? Number(raw.trim()) : NaN;
+    if (!Number.isInteger(n) || n < MIN_FIELD_NUMBER || n > MAX_FIELD_NUMBER) {
+      throw new ServerError(
+        ErrorCode.INVALID_FIELD,
+        `${field.name} must be a whole number from ${MIN_FIELD_NUMBER} to ${MAX_FIELD_NUMBER}`
+      );
+    }
+    return n;
+  }
+  const text = (typeof raw === "string" ? raw : typeof raw === "number" ? String(raw) : "").trim();
+  if (!text || text.length > MAX_FIELD_TEXT_LENGTH) {
+    throw new ServerError(
+      ErrorCode.INVALID_FIELD,
+      `${field.name} must be 1-${MAX_FIELD_TEXT_LENGTH} characters`
+    );
+  }
+  return text;
 }
 
 export function validateName(raw: unknown): string {
@@ -77,6 +154,7 @@ export class SessionStore {
       dmClientId: null,
       status: "WAITING",
       players: [],
+      customFields: [],
       turnState: { currentPlayerId: null, round: 1 },
       createdAt: now,
       lastActivityAt: now,
@@ -115,6 +193,7 @@ export class SessionStore {
       name,
       initiative,
       isNpc: true,
+      fields: {},
       clientId: null,
       playerToken: null,
       createdAt: Date.now(),
@@ -224,6 +303,7 @@ export class SessionStore {
   /**
    * New combat: the previous fight's NPCs are removed, players stay with their
    * initiative cleared until they re-enter it, and the turn goes back to round 1.
+   * Custom fields and players' values carry over.
    */
   reset(session: Session): void {
     session.players = session.players.filter((p) => !p.isNpc);
@@ -231,6 +311,83 @@ export class SessionStore {
     session.status = "WAITING";
     session.turnState = { currentPlayerId: null, round: 1 };
     this.touch(session);
+  }
+
+  addField(session: Session, name: unknown, type: unknown): CustomField {
+    if (session.customFields.length >= MAX_CUSTOM_FIELDS) {
+      throw new ServerError(
+        ErrorCode.INVALID_FIELD,
+        `A session can have at most ${MAX_CUSTOM_FIELDS} custom fields`
+      );
+    }
+    const field: CustomField = {
+      id: crypto.randomUUID(),
+      name: this.uniqueFieldName(session, validateFieldName(name)),
+      type: validateFieldType(type),
+    };
+    session.customFields.push(field);
+    this.touch(session);
+    return field;
+  }
+
+  /** Rename and/or retype a field. On a type change, values that don't fit the new type are dropped. */
+  updateField(session: Session, fieldId: string, changes: { name?: unknown; type?: unknown }): void {
+    const field = this.findField(session, fieldId);
+    const name =
+      changes.name === undefined
+        ? field.name
+        : this.uniqueFieldName(session, validateFieldName(changes.name), field.id);
+    const type = changes.type === undefined ? field.type : validateFieldType(changes.type);
+    if (type !== field.type) {
+      const retyped: CustomField = { ...field, type };
+      for (const p of session.players) {
+        if (!(field.id in p.fields)) continue;
+        try {
+          p.fields[field.id] = validateFieldValue(retyped, p.fields[field.id])!;
+        } catch {
+          delete p.fields[field.id];
+        }
+      }
+    }
+    field.name = name;
+    field.type = type;
+    this.touch(session);
+  }
+
+  removeField(session: Session, fieldId: string): void {
+    this.findField(session, fieldId);
+    session.customFields = session.customFields.filter((f) => f.id !== fieldId);
+    for (const p of session.players) delete p.fields[fieldId];
+    this.touch(session);
+  }
+
+  /** Sets (or with a blank/null value, clears) one player's value for one field. */
+  setFieldValue(session: Session, playerId: string, fieldId: string, raw: unknown): void {
+    const field = this.findField(session, fieldId);
+    const player = session.players.find((p) => p.id === playerId);
+    if (!player) {
+      throw new ServerError(ErrorCode.PLAYER_NOT_FOUND, "That player is no longer in the session");
+    }
+    const value = validateFieldValue(field, raw);
+    if (value === null) delete player.fields[fieldId];
+    else player.fields[fieldId] = value;
+    this.touch(session);
+  }
+
+  private findField(session: Session, fieldId: string): CustomField {
+    const field = session.customFields.find((f) => f.id === fieldId);
+    if (!field) {
+      throw new ServerError(ErrorCode.FIELD_NOT_FOUND, "That field no longer exists");
+    }
+    return field;
+  }
+
+  private uniqueFieldName(session: Session, name: string, exceptId?: string): string {
+    const lower = name.toLowerCase();
+    if (session.customFields.some((f) => f.id !== exceptId && f.name.toLowerCase() === lower)) {
+      throw new ServerError(ErrorCode.INVALID_FIELD, `There is already a "${name}" field`);
+    }
+    return name;
   }
 
   /** Binds a connection to a session as a player, or as the DM when playerId is null. */

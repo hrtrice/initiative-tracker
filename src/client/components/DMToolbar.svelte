@@ -41,6 +41,14 @@
     }
   }
 
+  function confirmNewCombat() {
+    if (
+      confirm("Start a new combat? NPCs are removed and players re-enter their initiative.")
+    ) {
+      onResetSession?.();
+    }
+  }
+
   function handleAddNpc() {
     const name = npcName.trim();
     const init = Number(npcInitiative);
@@ -60,13 +68,24 @@
 
 {#if isDM}
   <div class="dm-toolbar card">
-    <div class="room-code" onclick={() => copyToClipboard(roomCode ?? "", "Room code")} title="Click to copy">
+    <button
+      type="button"
+      class="room-code"
+      onclick={() => copyToClipboard(roomCode ?? "", "Room code")}
+      title="Tap to copy"
+    >
       {roomCode ?? "----"}
-    </div>
+    </button>
 
-    <div class="admin-key" onclick={() => copyToClipboard(dmToken ?? "", "Admin key")} title="Click to copy">
-      {maskedKey}
-    </div>
+    <button
+      type="button"
+      class="admin-key"
+      onclick={() => copyToClipboard(dmToken ?? "", "Admin Key")}
+      title="Tap to copy"
+    >
+      Admin Key: {maskedKey} (tap to copy)
+    </button>
+    <p class="admin-key-hint">Keep this to rejoin as DM from another device.</p>
 
     <div class="add-npc-section">
       <h3>Add NPC</h3>
@@ -94,7 +113,7 @@
     <div class="actions">
       <button class="btn-secondary" onclick={onPreviousTurn}>&#9664; Previous</button>
       <button class="btn-primary" onclick={onAdvanceTurn}>Next &#9654;</button>
-      <button class="btn-danger" onclick={onResetSession}>Reset</button>
+      <button class="btn-danger" onclick={confirmNewCombat}>New combat</button>
     </div>
   </div>
 {/if}

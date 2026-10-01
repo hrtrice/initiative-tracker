@@ -262,6 +262,62 @@ describe("WsHandler", () => {
     });
   });
 
+  describe("new combat", () => {
+    it("players re-enter their own initiative after RESET_SESSION", () => {
+      const { dm, roomCode, dmToken } = createSession();
+      const a = join(roomCode, "Aragorn", 15);
+      dm.send({ type: "ADD_NPC", payload: { dmToken, name: "Goblin", initiative: 20 } });
+      dm.send({ type: "RESET_SESSION", payload: { dmToken } });
+      expect(a.tab.last()).toMatchObject({
+        type: "SESSION_RESET",
+        payload: { players: [{ name: "Aragorn", initiative: null }] },
+      });
+
+      a.tab.send({ type: "SUBMIT_INITIATIVE", payload: { initiative: 17 } });
+      expect(dm.last()).toMatchObject({
+        type: "INITIATIVE_UPDATED",
+        payload: { players: [{ name: "Aragorn", initiative: 17 }] },
+      });
+
+      a.tab.send({ type: "SUBMIT_INITIATIVE", payload: { initiative: 25 } });
+      expect(a.tab.last()).toMatchObject({ type: "ERROR", payload: { code: ErrorCode.UNAUTHORIZED } });
+    });
+
+    it("SUBMIT_INITIATIVE is refused from the DM and unbound connections", () => {
+      const { dm } = createSession();
+      dm.send({ type: "SUBMIT_INITIATIVE", payload: { initiative: 10 } });
+      expect(dm.last()).toMatchObject({ type: "ERROR", payload: { code: ErrorCode.UNAUTHORIZED } });
+      const tab = connect();
+      tab.send({ type: "SUBMIT_INITIATIVE", payload: { initiative: 10 } });
+      expect(tab.last()).toMatchObject({ type: "ERROR", payload: { code: ErrorCode.UNAUTHORIZED } });
+    });
+  });
+
+  describe("LEAVE_SESSION", () => {
+    it("a leaving player is removed, everyone is told, and the name is free again", () => {
+      const { dm, roomCode } = createSession();
+      const a = join(roomCode, "Aragorn", 15);
+      a.tab.send({ type: "LEAVE_SESSION", payload: {} });
+      expect(dm.last()).toMatchObject({ type: "PLAYER_REMOVED", payload: { players: [] } });
+      const again = join(roomCode, "Aragorn", 12);
+      expect(again.players.map((p) => p.name)).toEqual(["Aragorn"]);
+    });
+
+    it("the DM leaving keeps the session, recoverable with the Admin Key", () => {
+      const { dm, roomCode, dmToken, sessionId } = createSession();
+      const a = join(roomCode, "Aragorn", 15);
+      dm.send({ type: "LEAVE_SESSION", payload: {} });
+      expect(store.findById(sessionId)).toBeDefined();
+      dm.send({ type: "ADVANCE_TURN", payload: { dmToken } });
+      expect(dm.last()).toMatchObject({ type: "ERROR", payload: { code: ErrorCode.UNAUTHORIZED } });
+
+      const dm2 = connect();
+      dm2.send({ type: "RECOVER_SESSION", payload: { roomCode, dmToken } });
+      dm2.send({ type: "ADVANCE_TURN", payload: { dmToken } });
+      expect(a.tab.last().type).toBe("TURN_ADVANCED");
+    });
+  });
+
   describe("sweepExpiredSessions", () => {
     it("evicts idle sessions nobody is connected to", () => {
       const { dm, sessionId } = createSession();

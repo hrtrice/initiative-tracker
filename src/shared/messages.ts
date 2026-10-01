@@ -57,6 +57,13 @@ export interface AddNpcPayload {
   initiative: number;
 }
 
+/** A player entering their own roll; only allowed while their initiative is pending. */
+export interface SubmitInitiativePayload {
+  initiative: number;
+}
+
+export interface LeaveSessionPayload {}
+
 export interface ClientMessageMap {
   CREATE_SESSION: CreateSessionPayload;
   JOIN_SESSION: JoinSessionPayload;
@@ -69,6 +76,8 @@ export interface ClientMessageMap {
   PREVIOUS_TURN: PreviousTurnPayload;
   RESET_SESSION: ResetSessionPayload;
   ADD_NPC: AddNpcPayload;
+  SUBMIT_INITIATIVE: SubmitInitiativePayload;
+  LEAVE_SESSION: LeaveSessionPayload;
 }
 
 export type ClientMessage = {

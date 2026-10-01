@@ -258,6 +258,59 @@ describe("SessionStore", () => {
       expect(session.turnState.round).toBe(1);
       expect(current(session)).toBe("Legolas");
     });
+
+    it("keeps players, clears their initiative, and removes NPCs", () => {
+      seed(["Legolas", 22], ["Aragorn", 15]);
+      store.addNpc(session, "Goblin", 18);
+      store.reset(session);
+      expect(names(session)).toEqual(["Legolas", "Aragorn"]);
+      expect(session.players.map((p) => p.initiative)).toEqual([null, null]);
+    });
+
+    it("players who re-roll sort above those still pending, by their new roll", () => {
+      seed(["Legolas", 22], ["Aragorn", 15], ["Gimli", 8]);
+      store.reset(session);
+      const id = (n: string) => session.players.find((p) => p.name === n)!.id;
+      store.submitInitiative(session, id("Gimli"), 12);
+      store.submitInitiative(session, id("Aragorn"), 19);
+      expect(names(session)).toEqual(["Aragorn", "Gimli", "Legolas"]);
+      expect(session.players.at(-1)!.initiative).toBeNull();
+      expect(current(session)).toBe("Aragorn");
+    });
+
+    it("new NPCs sort above players who haven't re-rolled yet", () => {
+      seed(["Aragorn", 15]);
+      store.reset(session);
+      store.addNpc(session, "Orc", 3);
+      expect(names(session)).toEqual(["Orc", "Aragorn"]);
+    });
+  });
+
+  describe("submitInitiative", () => {
+    it("is refused once the player's initiative is set (only the DM can change it)", () => {
+      seed(["Aragorn", 15]);
+      expectCode(
+        () => store.submitInitiative(session, session.players[0]!.id, 20),
+        ErrorCode.UNAUTHORIZED
+      );
+      expect(session.players[0]!.initiative).toBe(15);
+    });
+
+    it("rejects blank or missing values instead of treating them as 0", () => {
+      seed(["Aragorn", 15]);
+      store.reset(session);
+      const id = session.players[0]!.id;
+      expectCode(() => store.submitInitiative(session, id, null), ErrorCode.INVALID_INITIATIVE);
+      expectCode(() => store.submitInitiative(session, id, ""), ErrorCode.INVALID_INITIATIVE);
+      expect(session.players[0]!.initiative).toBeNull();
+    });
+
+    it("lets the DM set a pending player's initiative", () => {
+      seed(["Aragorn", 15]);
+      store.reset(session);
+      store.updateInitiative(session, session.players[0]!.id, 11);
+      expect(session.players[0]!.initiative).toBe(11);
+    });
   });
 
   describe("client bindings", () => {

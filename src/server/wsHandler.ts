@@ -80,6 +80,10 @@ export class WsHandler {
           return this.handleTurnCommand(client, msg.payload, "SESSION_RESET");
         case "ADD_NPC":
           return this.handleAddNpc(client, msg.payload);
+        case "SUBMIT_INITIATIVE":
+          return this.handleSubmitInitiative(client, msg.payload);
+        case "LEAVE_SESSION":
+          return this.handleLeaveSession(client);
         default:
           this.sendError(client.id, ErrorCode.UNKNOWN_ERROR, "Unknown message type");
       }
@@ -192,6 +196,28 @@ export class WsHandler {
     this.broadcast(session.id, { type: "PLAYER_JOINED", payload: snapshot(session) });
   }
 
+  private handleSubmitInitiative(
+    client: WsClient,
+    payload: ClientMessageMap["SUBMIT_INITIATIVE"]
+  ): void {
+    const { session, playerId } = this.requirePlayer(client);
+    this.store.submitInitiative(session, playerId, payload.initiative);
+    this.broadcast(session.id, { type: "INITIATIVE_UPDATED", payload: snapshot(session) });
+  }
+
+  /** A player leaving frees their name; the DM leaving just detaches this connection. */
+  private handleLeaveSession(client: WsClient): void {
+    const binding = this.store.getBinding(client.id);
+    const session = binding && this.store.findById(binding.sessionId);
+    if (!binding || !session) return;
+    if (binding.playerId === null) {
+      this.store.unbindClient(client.id);
+      return;
+    }
+    this.store.removePlayer(session, binding.playerId);
+    this.broadcast(session.id, { type: "PLAYER_REMOVED", payload: snapshot(session) });
+  }
+
   private handleTurnCommand(
     client: WsClient,
     payload: { dmToken: string },
@@ -224,6 +250,15 @@ export class WsHandler {
       throw new ServerError(ErrorCode.UNAUTHORIZED, "Only the DM can do that");
     }
     return session;
+  }
+
+  private requirePlayer(client: WsClient): { session: Session; playerId: string } {
+    const binding = this.store.getBinding(client.id);
+    const session = binding ? this.store.findById(binding.sessionId) : undefined;
+    if (!binding || !session || binding.playerId === null) {
+      throw new ServerError(ErrorCode.UNAUTHORIZED, "You're not a player in a session");
+    }
+    return { session, playerId: binding.playerId };
   }
 
   removeClient(clientId: string): void {

@@ -309,6 +309,14 @@ label {
   margin-top: 1rem;
 }
 
+.dm-toolbar .room-code,
+.dm-toolbar .admin-key {
+  display: block;
+  width: 100%;
+  border: none;
+  color: inherit;
+}
+
 .dm-toolbar .room-code {
   text-align: center;
   font-size: 2rem;
@@ -327,9 +335,55 @@ label {
   font-size: 0.75rem;
   font-family: var(--font-mono);
   color: var(--color-text-muted);
+  background: none;
   cursor: pointer;
-  user-select: all;
   word-break: break-all;
+}
+
+.dm-toolbar .admin-key-hint {
+  margin: -0.75rem 0 0;
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.initiative-edit {
+  width: 3.5rem;
+  text-align: center;
+  font-family: var(--font-mono);
+}
+
+.player-row .initiative-btn {
+  background: none;
+  border: 1px dashed var(--color-text-muted);
+  border-radius: var(--radius-sm);
+  padding: 0.125rem 0.25rem;
+  cursor: pointer;
+}
+
+.initiative-prompt {
+  margin-bottom: 1rem;
+}
+
+.initiative-prompt form {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-end;
+}
+
+.initiative-prompt input {
+  flex: 1;
+}
+
+.recover-section summary {
+  cursor: pointer;
+  color: var(--color-text-muted);
+  margin-bottom: 0.75rem;
+}
+
+.leave-row {
+  text-align: center;
+  margin-top: 1.5rem;
 }
 
 .dm-toolbar .actions {

@@ -1,71 +1,66 @@
 <script lang="ts">
-  import type { Player } from "../lib/types";
+  import type { PlayerView } from "../lib/types";
 
   let {
     players = [],
     isDM = false,
+    myPlayerId = null,
     currentPlayer,
     onRemovePlayer,
     onReorderPlayers,
   }: {
-    players: Player[];
+    players: PlayerView[];
     isDM?: boolean;
-    currentPlayer: Player | null;
+    myPlayerId?: string | null;
+    currentPlayer: PlayerView | null;
     onRemovePlayer?: (playerId: string) => void;
     onReorderPlayers?: (orderedPlayerIds: string[]) => void;
   } = $props();
 
-  let sorted = $derived([...players].filter((p) => !p.isDM).sort((a, b) => a.sortOrder - b.sortOrder));
-
-  function moveUp(index: number) {
-    if (index === 0) return;
-    const ids = sorted.map((p) => p.id);
-    [ids[index - 1], ids[index]] = [ids[index]!, ids[index - 1]!];
-    onReorderPlayers?.(ids);
-  }
-
-  function moveDown(index: number) {
-    if (index >= sorted.length - 1) return;
-    const ids = sorted.map((p) => p.id);
-    [ids[index], ids[index + 1]] = [ids[index + 1]!, ids[index]!];
+  // The server sends players in turn order; swap neighbours and send the full new order.
+  function swap(a: number, b: number) {
+    const ids = players.map((p) => p.id);
+    [ids[a], ids[b]] = [ids[b]!, ids[a]!];
     onReorderPlayers?.(ids);
   }
 </script>
 
-{#if sorted.length === 0}
-  <p class="empty-state">No players yet. Waiting for players to join...</p>
+{#if players.length === 0}
+  <p class="empty-state">
+    {isDM ? "No one yet. Share the room code, or add NPCs below." : "Waiting for players to join..."}
+  </p>
 {:else}
   <ul class="player-list">
-    {#each sorted as player, i (player.id)}
-      <li
-        class="player-row"
-        class:current-turn={currentPlayer?.id === player.id}
-      >
+    {#each players as player, i (player.id)}
+      <li class="player-row" class:current-turn={currentPlayer?.id === player.id}>
         <span class="initiative">{player.initiative}</span>
         <span class="name">
           {player.name}
-          {#if player.isDM}
-            <span class="dm-badge">DM</span>
+          {#if isDM && player.isNpc}
+            <span class="badge">NPC</span>
+          {/if}
+          {#if player.id === myPlayerId}
+            <span class="badge">You</span>
           {/if}
         </span>
-        {#if isDM && !player.isDM}
+        {#if isDM}
           <div class="controls">
             <button
               class="btn-icon btn-ghost"
-              onclick={() => moveUp(i)}
+              onclick={() => swap(i - 1, i)}
               disabled={i === 0}
-              aria-label="Move up"
+              aria-label="Move {player.name} up"
             >&#9650;</button>
             <button
               class="btn-icon btn-ghost"
-              onclick={() => moveDown(i)}
-              disabled={i === sorted.length - 1}
-              aria-label="Move down"
+              onclick={() => swap(i, i + 1)}
+              disabled={i === players.length - 1}
+              aria-label="Move {player.name} down"
             >&#9660;</button>
             <button
               class="btn-icon btn-danger"
               onclick={() => onRemovePlayer?.(player.id)}
-              aria-label="Remove player"
+              aria-label="Remove {player.name}"
             >&#10005;</button>
           </div>
         {/if}

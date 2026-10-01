@@ -36,7 +36,8 @@
     return valid;
   }
 
-  function handleSubmit() {
+  function handleSubmit(event: SubmitEvent) {
+    event.preventDefault();
     if (!validate()) return;
     const initiative = parseInt(initiativeStr, 10);
     onsubmit?.({ name: name.trim(), initiative });

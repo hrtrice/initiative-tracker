@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import type { Session, Player } from "../shared/types";
+import type { Session, Player, PlayerView, TurnState } from "../shared/types";
 import {
   MAX_PLAYERS,
   SESSION_EXPIRY_MS,
@@ -10,70 +10,74 @@ import {
   ErrorCode,
 } from "../shared/constants";
 import { generateUniqueRoomCode } from "./roomCode";
+import { ServerError } from "./errors";
+
+/** Which session a connection belongs to, and as whom (null playerId = the DM). */
+interface ClientBinding {
+  sessionId: string;
+  playerId: string | null;
+}
+
+export function toPlayerView(p: Player): PlayerView {
+  return { id: p.id, name: p.name, initiative: p.initiative, isNpc: p.isNpc };
+}
+
+export function snapshot(session: Session): { players: PlayerView[]; turnState: TurnState } {
+  return { players: session.players.map(toPlayerView), turnState: { ...session.turnState } };
+}
+
+export function validateName(raw: unknown): string {
+  const name = typeof raw === "string" ? raw.trim() : "";
+  if (name.length < MIN_NAME_LENGTH || name.length > MAX_NAME_LENGTH) {
+    throw new ServerError(
+      ErrorCode.INVALID_NAME,
+      `Name must be ${MIN_NAME_LENGTH}-${MAX_NAME_LENGTH} characters`
+    );
+  }
+  return name;
+}
+
+export function validateInitiative(raw: unknown): number {
+  const init = typeof raw === "number" ? raw : Number(raw);
+  if (!Number.isInteger(init) || init < MIN_INITIATIVE || init > MAX_INITIATIVE) {
+    throw new ServerError(
+      ErrorCode.INVALID_INITIATIVE,
+      `Initiative must be a whole number from ${MIN_INITIATIVE} to ${MAX_INITIATIVE}`
+    );
+  }
+  return init;
+}
+
+/**
+ * Insert below every entry with equal or higher initiative, so ties keep join order
+ * and the DM's manual reorders of other entries are left alone.
+ */
+function insertByInitiative(players: Player[], player: Player): void {
+  const idx = players.findIndex((p) => p.initiative < player.initiative);
+  if (idx === -1) players.push(player);
+  else players.splice(idx, 0, player);
+}
 
 export class SessionStore {
-  private sessions: Map<string, Session>;
-  private sessionsByCode: Map<string, Session>;
-  private clientToSession: Map<string, string>;
-  private clientToPlayer: Map<string, string>;
+  private sessions = new Map<string, Session>();
+  private sessionsByCode = new Map<string, Session>();
+  private bindings = new Map<string, ClientBinding>();
 
-  constructor() {
-    this.sessions = new Map();
-    this.sessionsByCode = new Map();
-    this.clientToSession = new Map();
-    this.clientToPlayer = new Map();
-  }
-
-  private ensureCurrentIndexOnNonDM(session: Session): void {
-    if (session.players.length === 0) {
-      session.turnState.currentIndex = 0;
-      return;
-    }
-    let attempts = 0;
-    while (
-      attempts < session.players.length &&
-      session.players[session.turnState.currentIndex]?.isDM
-    ) {
-      session.turnState.currentIndex++;
-      if (session.turnState.currentIndex >= session.players.length) {
-        session.turnState.currentIndex = 0;
-      }
-      attempts++;
-    }
-  }
-
-  create(dmToken: string, dmPlayerId: string): Session {
-    const id = crypto.randomUUID();
-    const code = generateUniqueRoomCode(
-      new Set(this.sessionsByCode.keys())
-    );
+  create(dmToken: string): Session {
     const now = Date.now();
     const session: Session = {
-      id,
-      roomCode: code,
+      id: crypto.randomUUID(),
+      roomCode: generateUniqueRoomCode(new Set(this.sessionsByCode.keys())),
       dmToken,
-      dmPlayerId,
+      dmClientId: null,
       status: "WAITING",
       players: [],
-      turnState: { currentIndex: 0, round: 1 },
+      turnState: { currentPlayerId: null, round: 1 },
       createdAt: now,
       lastActivityAt: now,
     };
-    const dmPlayer: Player = {
-      id: dmPlayerId,
-      sessionId: id,
-      name: "Dungeon Master",
-      initiative: 0,
-      sortOrder: 0,
-      isDM: true,
-      clientId: null,
-      playerToken: dmToken,
-      createdAt: now,
-    };
-    session.players.push(dmPlayer);
-    this.ensureCurrentIndexOnNonDM(session);
-    this.sessions.set(id, session);
-    this.sessionsByCode.set(code, session);
+    this.sessions.set(session.id, session);
+    this.sessionsByCode.set(session.roomCode, session);
     return session;
   }
 
@@ -87,217 +91,188 @@ export class SessionStore {
 
   addPlayer(session: Session, player: Player): void {
     if (session.players.length >= MAX_PLAYERS) {
-      throw new Error(ErrorCode.SESSION_FULL);
+      throw new ServerError(ErrorCode.SESSION_FULL, `This session is full (${MAX_PLAYERS} max)`);
     }
-    const nameLower = player.name.trim().toLowerCase();
-    if (
-      nameLower.length < MIN_NAME_LENGTH ||
-      nameLower.length > MAX_NAME_LENGTH
-    ) {
-      throw new Error(ErrorCode.INVALID_NAME);
-    }
+    player.name = validateName(player.name);
+    player.initiative = validateInitiative(player.initiative);
+    const nameLower = player.name.toLowerCase();
     if (session.players.some((p) => p.name.toLowerCase() === nameLower)) {
-      throw new Error(ErrorCode.NAME_TAKEN);
+      throw new ServerError(ErrorCode.NAME_TAKEN, `"${player.name}" is already in this session`);
     }
-    player.sortOrder = session.players.length;
-    session.players.push(player);
-    this.ensureCurrentIndexOnNonDM(session);
-    session.lastActivityAt = Date.now();
+    insertByInitiative(session.players, player);
+    this.touch(session);
   }
 
-  removePlayer(session: Session, playerId: string): void {
-    const idx = session.players.findIndex((p) => p.id === playerId);
-    if (idx === -1) return;
-    const removed = session.players[idx]!;
-    if (removed.clientId) {
-      this.clientToSession.delete(removed.clientId);
-      this.clientToPlayer.delete(removed.clientId);
-    }
-    session.players.splice(idx, 1);
-    session.players.forEach((p, i) => {
-      p.sortOrder = i;
-    });
-    this.ensureCurrentIndexOnNonDM(session);
-    session.lastActivityAt = Date.now();
-  }
-
-  updateInitiative(session: Session, playerId: string, initiative: number): void {
-    if (initiative < MIN_INITIATIVE || initiative > MAX_INITIATIVE) {
-      throw new Error(ErrorCode.INVALID_INITIATIVE);
-    }
-    const player = session.players.find((p) => p.id === playerId);
-    if (!player) {
-      throw new Error(ErrorCode.PLAYER_NOT_FOUND);
-    }
-    player.initiative = initiative;
-    session.players.sort((a, b) => {
-      if (b.initiative !== a.initiative) return b.initiative - a.initiative;
-      return a.createdAt - b.createdAt;
-    });
-    session.players.forEach((p, i) => {
-      p.sortOrder = i;
-    });
-    session.lastActivityAt = Date.now();
-  }
-
-  reorderPlayers(session: Session, orderedPlayerIds: string[]): void {
-    const idSet = new Set(orderedPlayerIds);
-    if (idSet.size !== orderedPlayerIds.length) {
-      throw new Error(ErrorCode.INVALID_NAME);
-    }
-    if (orderedPlayerIds.length !== session.players.length) {
-      throw new Error(ErrorCode.INVALID_NAME);
-    }
-    const playerMap = new Map(session.players.map((p) => [p.id, p]));
-    const reordered: Player[] = [];
-    for (const id of orderedPlayerIds) {
-      const player = playerMap.get(id);
-      if (!player) {
-        throw new Error(ErrorCode.PLAYER_NOT_FOUND);
-      }
-      reordered.push(player);
-    }
-    reordered.forEach((p, i) => {
-      p.sortOrder = i;
-    });
-    session.players = reordered;
-    session.lastActivityAt = Date.now();
-  }
-
-  advanceTurn(session: Session): void {
-    if (session.players.length === 0) return;
-    const nonDMs = session.players.filter((p) => !p.isDM);
-    if (nonDMs.length === 0) return;
-    let attempts = 0;
-    do {
-      session.turnState.currentIndex++;
-      if (session.turnState.currentIndex >= session.players.length) {
-        session.turnState.currentIndex = 0;
-        session.turnState.round++;
-      }
-      attempts++;
-    } while (
-      attempts <= session.players.length &&
-      session.players[session.turnState.currentIndex]?.isDM
-    );
-    session.lastActivityAt = Date.now();
-  }
-
-  previousTurn(session: Session): void {
-    if (session.players.length === 0) return;
-    const nonDMs = session.players.filter((p) => !p.isDM);
-    if (nonDMs.length === 0) return;
-    let attempts = 0;
-    do {
-      session.turnState.currentIndex--;
-      if (session.turnState.currentIndex < 0) {
-        session.turnState.currentIndex = session.players.length - 1;
-        session.turnState.round = Math.max(1, session.turnState.round - 1);
-      }
-      attempts++;
-    } while (
-      attempts <= session.players.length &&
-      session.players[session.turnState.currentIndex]?.isDM
-    );
-    session.lastActivityAt = Date.now();
-  }
-
-  addNpc(session: Session, name: string, initiative: number, playerToken: string): Player {
-    const player: Player = {
+  addNpc(session: Session, name: string, initiative: number): Player {
+    const npc: Player = {
       id: crypto.randomUUID(),
       sessionId: session.id,
       name,
       initiative,
-      sortOrder: session.players.length,
-      isDM: false,
+      isNpc: true,
       clientId: null,
-      playerToken,
+      playerToken: null,
       createdAt: Date.now(),
     };
-    session.players.push(player);
-    this.ensureCurrentIndexOnNonDM(session);
-    session.lastActivityAt = Date.now();
-    return player;
+    this.addPlayer(session, npc);
+    return npc;
   }
 
+  /** Removes a player. If it was their turn, the turn passes to whoever was next. */
+  removePlayer(session: Session, playerId: string): Player {
+    const idx = session.players.findIndex((p) => p.id === playerId);
+    if (idx === -1) {
+      throw new ServerError(ErrorCode.PLAYER_NOT_FOUND, "That player is no longer in the session");
+    }
+    const [removed] = session.players.splice(idx, 1);
+    if (removed!.clientId) this.bindings.delete(removed!.clientId);
+
+    const ts = session.turnState;
+    if (ts.currentPlayerId === playerId && session.status === "ACTIVE") {
+      if (session.players.length === 0) {
+        ts.currentPlayerId = null;
+      } else if (idx < session.players.length) {
+        ts.currentPlayerId = session.players[idx]!.id;
+      } else {
+        ts.currentPlayerId = session.players[0]!.id;
+        ts.round++;
+      }
+    }
+    this.touch(session);
+    return removed!;
+  }
+
+  updateInitiative(session: Session, playerId: string, initiative: number): void {
+    const value = validateInitiative(initiative);
+    const idx = session.players.findIndex((p) => p.id === playerId);
+    if (idx === -1) {
+      throw new ServerError(ErrorCode.PLAYER_NOT_FOUND, "That player is no longer in the session");
+    }
+    const [player] = session.players.splice(idx, 1);
+    player!.initiative = value;
+    insertByInitiative(session.players, player!);
+    this.touch(session);
+  }
+
+  reorderPlayers(session: Session, orderedPlayerIds: unknown): void {
+    const byId = new Map(session.players.map((p) => [p.id, p]));
+    const ids = Array.isArray(orderedPlayerIds) ? orderedPlayerIds : [];
+    const reordered = ids.map((id) => byId.get(id)).filter((p): p is Player => !!p);
+    if (reordered.length !== session.players.length || new Set(ids).size !== ids.length) {
+      throw new ServerError(
+        ErrorCode.INVALID_REORDER,
+        "The list changed while you were reordering. Please try again."
+      );
+    }
+    session.players = reordered;
+    this.touch(session);
+  }
+
+  /** Next turn. After the last entry, loops back to the top and starts a new round. */
+  advanceTurn(session: Session): void {
+    const { players, turnState: ts } = session;
+    if (players.length === 0) return;
+    session.status = "ACTIVE";
+    const idx = players.findIndex((p) => p.id === ts.currentPlayerId);
+    if (idx === -1) {
+      ts.currentPlayerId = players[0]!.id;
+    } else if (idx === players.length - 1) {
+      ts.currentPlayerId = players[0]!.id;
+      ts.round++;
+    } else {
+      ts.currentPlayerId = players[idx + 1]!.id;
+    }
+    this.touch(session);
+  }
+
+  /** Previous turn. Before the top, wraps to the last entry of the previous round (round never below 1). */
+  previousTurn(session: Session): void {
+    const { players, turnState: ts } = session;
+    if (players.length === 0) return;
+    session.status = "ACTIVE";
+    const idx = players.findIndex((p) => p.id === ts.currentPlayerId);
+    if (idx <= 0) {
+      ts.currentPlayerId = players[players.length - 1]!.id;
+      ts.round = Math.max(1, ts.round - 1);
+    } else {
+      ts.currentPlayerId = players[idx - 1]!.id;
+    }
+    this.touch(session);
+  }
+
+  /** New combat: round 1, turn back at the top of the order. */
   reset(session: Session): void {
-    session.turnState = { currentIndex: 0, round: 1 };
-    this.ensureCurrentIndexOnNonDM(session);
     session.status = "WAITING";
-    session.lastActivityAt = Date.now();
+    session.turnState = { currentPlayerId: null, round: 1 };
+    this.touch(session);
   }
 
-  registerClient(clientId: string, sessionId: string, playerId: string): void {
-    this.clientToSession.set(clientId, sessionId);
-    this.clientToPlayer.set(clientId, playerId);
-    const session = this.sessions.get(sessionId);
-    if (session) {
+  /** Binds a connection to a session as a player, or as the DM when playerId is null. */
+  bindClient(clientId: string, session: Session, playerId: string | null): void {
+    this.unbindClient(clientId);
+    if (playerId === null) {
+      session.dmClientId = clientId;
+    } else {
       const player = session.players.find((p) => p.id === playerId);
-      if (player) {
-        player.clientId = clientId;
-      }
+      if (!player) return;
+      player.clientId = clientId;
+    }
+    this.bindings.set(clientId, { sessionId: session.id, playerId });
+  }
+
+  /**
+   * Forgets a connection. Only clears the session's pointer if it still points at this
+   * connection, so a stale socket closing can't detach someone who already reconnected.
+   */
+  unbindClient(clientId: string): void {
+    const binding = this.bindings.get(clientId);
+    if (!binding) return;
+    this.bindings.delete(clientId);
+    const session = this.sessions.get(binding.sessionId);
+    if (!session) return;
+    if (binding.playerId === null) {
+      if (session.dmClientId === clientId) session.dmClientId = null;
+    } else {
+      const player = session.players.find((p) => p.id === binding.playerId);
+      if (player && player.clientId === clientId) player.clientId = null;
     }
   }
 
-  disconnectClient(clientId: string): void {
-    const sessionId = this.clientToSession.get(clientId);
-    const playerId = this.clientToPlayer.get(clientId);
-    if (sessionId && playerId) {
-      const session = this.sessions.get(sessionId);
-      if (session) {
-        const player = session.players.find((p) => p.id === playerId);
-        if (player) {
-          player.clientId = null;
-        }
-      }
-    }
-    this.clientToSession.delete(clientId);
-    this.clientToPlayer.delete(clientId);
+  getBinding(clientId: string): ClientBinding | undefined {
+    return this.bindings.get(clientId);
   }
 
   findExpiredSessions(): Session[] {
     const now = Date.now();
-    const expired: Session[] = [];
-    for (const session of this.sessions.values()) {
-      const hasConnected = session.players.some((p) => p.clientId !== null);
-      if (hasConnected) continue;
-      if (now - session.lastActivityAt > SESSION_EXPIRY_MS) {
-        expired.push(session);
-      }
-    }
-    return expired;
+    return Array.from(this.sessions.values()).filter(
+      (s) =>
+        s.dmClientId === null &&
+        s.players.every((p) => p.clientId === null) &&
+        now - s.lastActivityAt > SESSION_EXPIRY_MS
+    );
   }
 
   evictSession(sessionId: string): void {
     const session = this.sessions.get(sessionId);
     if (!session) return;
-    for (const player of session.players) {
-      if (player.clientId) {
-        this.clientToSession.delete(player.clientId);
-        this.clientToPlayer.delete(player.clientId);
-      }
+    for (const [clientId, binding] of this.bindings) {
+      if (binding.sessionId === sessionId) this.bindings.delete(clientId);
     }
     this.sessionsByCode.delete(session.roomCode);
     this.sessions.delete(sessionId);
-  }
-
-  findConnectedSessions(): Session[] {
-    return Array.from(this.sessions.values()).filter((s) =>
-      s.players.some((p) => p.clientId !== null)
-    );
   }
 
   getActiveCount(): number {
     return this.sessions.size;
   }
 
-  getConnectionCount(): number {
-    let count = 0;
-    for (const session of this.sessions.values()) {
-      for (const player of session.players) {
-        if (player.clientId !== null) count++;
-      }
+  /** Whose turn it is is derived, not stored, while combat hasn't started: always the top. */
+  private touch(session: Session): void {
+    if (session.status === "WAITING") {
+      session.turnState.currentPlayerId = session.players[0]?.id ?? null;
+    } else if (session.turnState.currentPlayerId === null && session.players.length > 0) {
+      session.turnState.currentPlayerId = session.players[0]!.id;
     }
-    return count;
+    session.lastActivityAt = Date.now();
   }
 }

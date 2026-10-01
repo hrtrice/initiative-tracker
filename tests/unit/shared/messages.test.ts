@@ -68,21 +68,23 @@ describe("ServerMessage union narrowing", () => {
         dmToken: "dm-token",
         sessionId: "session-1",
         players: [],
-        turnState: { currentIndex: 0, round: 1 },
+        turnState: { currentPlayerId: null, round: 1 },
       },
     };
     expect(msg.payload.roomCode).toBe("ABCD");
     expect(msg.payload.players).toEqual([]);
   });
 
-  it("JOIN_ACCEPTED has playerId, playerToken, players, turnState", () => {
+  it("JOIN_ACCEPTED has sessionId, roomCode, playerId, playerToken, players, turnState", () => {
     const msg: ServerMessage = {
       type: "JOIN_ACCEPTED",
       payload: {
+        sessionId: "session-1",
+        roomCode: "2345",
         playerId: "p1",
         playerToken: "token-1",
         players: [],
-        turnState: { currentIndex: 0, round: 1 },
+        turnState: { currentPlayerId: null, round: 1 },
       },
     };
     expect(msg.payload.playerId).toBe("p1");
@@ -110,9 +112,9 @@ describe("ServerMessage union narrowing", () => {
       type: "TURN_ADVANCED",
       payload: {
         players: [],
-        turnState: { currentIndex: 1, round: 2 },
+        turnState: { currentPlayerId: "p1", round: 2 },
       },
     };
-    expect(msg.payload.turnState.currentIndex).toBe(1);
+    expect(msg.payload.turnState.currentPlayerId).toBe("p1");
   });
 });

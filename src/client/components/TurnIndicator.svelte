@@ -1,14 +1,18 @@
 <script lang="ts">
   import type { ConnectionStatus } from "../lib/wsClient";
-  import type { Player } from "../lib/types";
+  import type { PlayerView } from "../lib/types";
 
   let {
     currentPlayer,
     round = 1,
+    isDM = false,
+    myPlayerId = null,
     connectionStatus = "disconnected",
   }: {
-    currentPlayer: Player | null;
+    currentPlayer: PlayerView | null;
     round?: number;
+    isDM?: boolean;
+    myPlayerId?: string | null;
     connectionStatus?: ConnectionStatus;
   } = $props();
 
@@ -32,6 +36,11 @@
 <div class="turn-indicator card">
   {#if currentPlayer}
     <div class="player-name">{currentPlayer.name}</div>
+    {#if isDM && currentPlayer.isNpc}
+      <div class="turn-note">NPC turn: you're up</div>
+    {:else if currentPlayer.id === myPlayerId}
+      <div class="turn-note">Your turn!</div>
+    {/if}
     <div class="round-info">Round {round}</div>
   {:else}
     <div class="waiting">Waiting for players...</div>

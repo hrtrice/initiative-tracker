@@ -4,8 +4,10 @@ export interface Session {
   id: string;
   roomCode: string;
   dmToken: string;
-  dmPlayerId: string;
+  /** Connection currently acting as the DM; null while the DM is offline. */
+  dmClientId: string | null;
   status: SessionStatus;
+  /** Players and NPCs in turn order. The DM is not in this list. */
   players: Player[];
   turnState: TurnState;
   createdAt: number;
@@ -17,14 +19,23 @@ export interface Player {
   sessionId: string;
   name: string;
   initiative: number;
-  sortOrder: number;
-  isDM: boolean;
+  /** NPCs are added and run by the DM; they have no connection or token. */
+  isNpc: boolean;
   clientId: string | null;
-  playerToken: string;
+  playerToken: string | null;
   createdAt: number;
 }
 
+/** What clients see of a player: never includes tokens or connection ids. */
+export interface PlayerView {
+  id: string;
+  name: string;
+  initiative: number;
+  isNpc: boolean;
+}
+
 export interface TurnState {
-  currentIndex: number;
+  /** Whose turn it is; null when the list is empty. */
+  currentPlayerId: string | null;
   round: number;
 }

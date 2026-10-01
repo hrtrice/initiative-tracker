@@ -1,27 +1,15 @@
 import { WebSocket } from "ws";
 import type { IncomingMessage } from "http";
 import crypto from "crypto";
-import { SessionStore } from "./sessionStore";
-import type {
-  ClientMessage,
-  ClientMessageMap,
-  ServerMessage,
-} from "../shared/messages";
-import {
-  ErrorCode,
-  MIN_INITIATIVE,
-  MAX_INITIATIVE,
-  MIN_NAME_LENGTH,
-  MAX_NAME_LENGTH,
-} from "../shared/constants";
-import type { Player } from "../shared/types";
+import { SessionStore, snapshot, validateInitiative, validateName } from "./sessionStore";
+import { ServerError } from "./errors";
+import type { ClientMessage, ClientMessageMap, ServerMessage } from "../shared/messages";
+import { ErrorCode, WS_CLOSE_REMOVED } from "../shared/constants";
+import type { Player, Session } from "../shared/types";
 
 export interface WsClient {
   ws: WebSocket;
   id: string;
-  playerId?: string;
-  sessionId?: string;
-  isDM?: boolean;
   isAlive: boolean;
 }
 
@@ -57,18 +45,16 @@ export class WsHandler {
   }
 
   private handleMessage(client: WsClient, raw: string): void {
-    let parsed: unknown;
+    let msg: ClientMessage;
     try {
-      parsed = JSON.parse(raw);
+      msg = JSON.parse(raw);
+      if (!msg || typeof msg !== "object" || typeof msg.payload !== "object" || !msg.payload) {
+        throw new Error();
+      }
     } catch {
-      this.sendToClient(client.id, {
-        type: "ERROR",
-        payload: { code: ErrorCode.UNKNOWN_ERROR, message: "Invalid JSON" },
-      });
+      this.sendError(client.id, ErrorCode.UNKNOWN_ERROR, "Invalid message");
       return;
     }
-
-    const msg = parsed as ClientMessage;
 
     try {
       switch (msg.type) {
@@ -87,565 +73,162 @@ export class WsHandler {
         case "REMOVE_PLAYER":
           return this.handleRemovePlayer(client, msg.payload);
         case "ADVANCE_TURN":
-          return this.handleAdvanceTurn(client, msg.payload);
+          return this.handleTurnCommand(client, msg.payload, "TURN_ADVANCED");
         case "PREVIOUS_TURN":
-          return this.handlePreviousTurn(client, msg.payload);
+          return this.handleTurnCommand(client, msg.payload, "TURN_REGRESSED");
         case "RESET_SESSION":
-          return this.handleResetSession(client, msg.payload);
+          return this.handleTurnCommand(client, msg.payload, "SESSION_RESET");
         case "ADD_NPC":
           return this.handleAddNpc(client, msg.payload);
         default:
-          this.sendToClient(client.id, {
-            type: "ERROR",
-            payload: { code: ErrorCode.UNKNOWN_ERROR, message: "Unknown message type" },
-          });
+          this.sendError(client.id, ErrorCode.UNKNOWN_ERROR, "Unknown message type");
       }
     } catch (err) {
-      const code =
-        err instanceof Error &&
-        Object.values(ErrorCode).includes(err.message as ErrorCode)
-          ? (err.message as ErrorCode)
-          : ErrorCode.UNKNOWN_ERROR;
-      this.sendToClient(client.id, {
-        type: "ERROR",
-        payload: {
-          code,
-          message: err instanceof Error ? err.message : "Server error",
-        },
-      });
+      if (err instanceof ServerError) {
+        this.sendError(client.id, err.code, err.message);
+      } else {
+        console.error("Unhandled error processing message", err);
+        this.sendError(client.id, ErrorCode.UNKNOWN_ERROR, "Something went wrong on the server");
+      }
     }
   }
 
   private handleCreateSession(client: WsClient): void {
     const dmToken = crypto.randomUUID();
-    const dmPlayerId = crypto.randomUUID();
-    const session = this.store.create(dmToken, dmPlayerId);
-    this.store.registerClient(client.id, session.id, dmPlayerId);
-    client.sessionId = session.id;
-    client.playerId = dmPlayerId;
-    client.isDM = true;
-    this.sendToClient(client.id, {
+    const session = this.store.create(dmToken);
+    this.store.bindClient(client.id, session, null);
+    this.send(client.id, {
       type: "SESSION_CREATED",
-      payload: {
-        roomCode: session.roomCode,
-        dmToken,
-        sessionId: session.id,
-        players: session.players,
-        turnState: session.turnState,
-      },
+      payload: { sessionId: session.id, roomCode: session.roomCode, dmToken, ...snapshot(session) },
     });
   }
 
-  private handleJoinSession(
-    client: WsClient,
-    payload: ClientMessageMap["JOIN_SESSION"]
-  ): void {
-    const { roomCode, characterName, initiative } = payload;
-    if (!roomCode || typeof roomCode !== "string") {
-      this.sendToClient(client.id, {
-        type: "ERROR",
-        payload: { code: ErrorCode.UNKNOWN_ERROR, message: "Missing roomCode" },
-      });
-      return;
-    }
-    const session = this.store.findByCode(roomCode.toUpperCase());
-    if (!session) {
-      this.sendToClient(client.id, {
-        type: "ERROR",
-        payload: {
-          code: ErrorCode.SESSION_NOT_FOUND,
-          message: "Session not found",
-        },
-      });
-      return;
-    }
-    const name = (characterName || "").trim();
-    if (name.length < MIN_NAME_LENGTH || name.length > MAX_NAME_LENGTH) {
-      this.sendToClient(client.id, {
-        type: "ERROR",
-        payload: { code: ErrorCode.INVALID_NAME, message: "Invalid name length" },
-      });
-      return;
-    }
-    const init =
-      typeof initiative === "number" ? initiative : Number(initiative);
-    if (isNaN(init) || init < MIN_INITIATIVE || init > MAX_INITIATIVE) {
-      this.sendToClient(client.id, {
-        type: "ERROR",
-        payload: {
-          code: ErrorCode.INVALID_INITIATIVE,
-          message: "Initiative out of range",
-        },
-      });
-      return;
-    }
+  private handleJoinSession(client: WsClient, payload: ClientMessageMap["JOIN_SESSION"]): void {
+    const session = this.findSession(payload.roomCode);
     const playerToken = crypto.randomUUID();
     const player: Player = {
       id: crypto.randomUUID(),
       sessionId: session.id,
-      name,
-      initiative: init,
-      sortOrder: 0,
-      isDM: false,
+      name: validateName(payload.characterName),
+      initiative: validateInitiative(payload.initiative),
+      isNpc: false,
       clientId: null,
       playerToken,
       createdAt: Date.now(),
     };
-    try {
-      this.store.addPlayer(session, player);
-    } catch (err) {
-      const code =
-        err instanceof Error &&
-        Object.values(ErrorCode).includes(err.message as ErrorCode)
-          ? (err.message as ErrorCode)
-          : ErrorCode.UNKNOWN_ERROR;
-      this.sendToClient(client.id, {
-        type: "ERROR",
-        payload: {
-          code,
-          message: err instanceof Error ? err.message : "Failed to join",
-        },
-      });
-      return;
-    }
-    this.store.registerClient(client.id, session.id, player.id);
-    client.sessionId = session.id;
-    client.playerId = player.id;
-    client.isDM = false;
-    this.sendToClient(client.id, {
+    this.store.addPlayer(session, player);
+    this.store.bindClient(client.id, session, player.id);
+    this.send(client.id, {
       type: "JOIN_ACCEPTED",
       payload: {
+        sessionId: session.id,
+        roomCode: session.roomCode,
         playerId: player.id,
         playerToken,
-        players: session.players,
-        turnState: session.turnState,
+        ...snapshot(session),
       },
     });
-    this.broadcastToSession(
-      session.id,
-      {
-        type: "SESSION_STATE_SYNC",
-        payload: {
-          players: session.players,
-          turnState: session.turnState,
-        },
-      },
-      client.id
-    );
+    this.broadcast(session.id, { type: "PLAYER_JOINED", payload: snapshot(session) }, client.id);
   }
 
   private handleReconnectSession(
     client: WsClient,
     payload: ClientMessageMap["RECONNECT_SESSION"]
   ): void {
-    const { roomCode, playerToken } = payload;
-    const session = this.store.findByCode(roomCode.toUpperCase());
-    if (!session) {
-      this.sendToClient(client.id, {
-        type: "ERROR",
-        payload: {
-          code: ErrorCode.SESSION_NOT_FOUND,
-          message: "Session not found",
-        },
-      });
-      return;
-    }
-    const player = session.players.find((p) => p.playerToken === playerToken);
+    const session = this.findSession(payload.roomCode);
+    const player = session.players.find(
+      (p) => p.playerToken !== null && p.playerToken === payload.playerToken
+    );
     if (!player) {
-      this.sendToClient(client.id, {
-        type: "ERROR",
-        payload: {
-          code: ErrorCode.PLAYER_NOT_FOUND,
-          message: "Player not found",
-        },
-      });
-      return;
+      throw new ServerError(ErrorCode.PLAYER_NOT_FOUND, "You're no longer in that session");
     }
-    this.store.registerClient(client.id, session.id, player.id);
-    client.sessionId = session.id;
-    client.playerId = player.id;
-    client.isDM = player.isDM;
-    this.sendToClient(client.id, {
-      type: "SESSION_STATE_SYNC",
-      payload: {
-        players: session.players,
-        turnState: session.turnState,
-      },
-    });
+    this.store.bindClient(client.id, session, player.id);
+    this.sendStateSync(client.id, session, player.id);
   }
 
   private handleRecoverSession(
     client: WsClient,
     payload: ClientMessageMap["RECOVER_SESSION"]
   ): void {
-    const { roomCode, dmToken } = payload;
-    const session = this.store.findByCode(roomCode.toUpperCase());
-    if (!session) {
-      this.sendToClient(client.id, {
-        type: "ERROR",
-        payload: {
-          code: ErrorCode.SESSION_NOT_FOUND,
-          message: "Session not found",
-        },
-      });
-      return;
+    const session = this.findSession(payload.roomCode);
+    if (session.dmToken !== payload.dmToken) {
+      throw new ServerError(ErrorCode.UNAUTHORIZED, "That Admin Key doesn't match this session");
     }
-    if (session.dmToken !== dmToken) {
-      this.sendToClient(client.id, {
-        type: "ERROR",
-        payload: { code: ErrorCode.UNAUTHORIZED, message: "Invalid DM token" },
-      });
-      return;
-    }
-    this.store.registerClient(client.id, session.id, session.dmPlayerId);
-    client.sessionId = session.id;
-    client.playerId = session.dmPlayerId;
-    client.isDM = true;
-    this.sendToClient(client.id, {
-      type: "SESSION_STATE_SYNC",
-      payload: {
-        players: session.players,
-        turnState: session.turnState,
-        dmPlayerId: session.dmPlayerId,
-      },
-    });
+    this.store.bindClient(client.id, session, null);
+    this.sendStateSync(client.id, session, null);
   }
 
   private handleUpdateInitiative(
     client: WsClient,
     payload: ClientMessageMap["UPDATE_INITIATIVE"]
   ): void {
-    const { dmToken, playerId, initiative } = payload;
-    if (!client.sessionId) {
-      this.sendToClient(client.id, {
-        type: "ERROR",
-        payload: { code: ErrorCode.UNAUTHORIZED, message: "Not in a session" },
-      });
-      return;
-    }
-    const session = this.store.findById(client.sessionId);
-    if (!session) {
-      this.sendToClient(client.id, {
-        type: "ERROR",
-        payload: {
-          code: ErrorCode.SESSION_NOT_FOUND,
-          message: "Session not found",
-        },
-      });
-      return;
-    }
-    if (session.dmToken !== dmToken) {
-      this.sendToClient(client.id, {
-        type: "ERROR",
-        payload: { code: ErrorCode.UNAUTHORIZED, message: "Invalid DM token" },
-      });
-      return;
-    }
-    this.store.updateInitiative(session, playerId, initiative);
-    this.broadcastToSession(session.id, {
-      type: "INITIATIVE_UPDATED",
-      payload: {
-        players: session.players,
-        turnState: session.turnState,
-      },
-    });
+    const session = this.requireDm(client, payload.dmToken);
+    this.store.updateInitiative(session, payload.playerId, payload.initiative);
+    this.broadcast(session.id, { type: "INITIATIVE_UPDATED", payload: snapshot(session) });
   }
 
   private handleReorderPlayers(
     client: WsClient,
     payload: ClientMessageMap["REORDER_PLAYERS"]
   ): void {
-    const { dmToken, orderedPlayerIds } = payload;
-    if (!client.sessionId) {
-      this.sendToClient(client.id, {
-        type: "ERROR",
-        payload: { code: ErrorCode.UNAUTHORIZED, message: "Not in a session" },
-      });
-      return;
-    }
-    const session = this.store.findById(client.sessionId);
-    if (!session) {
-      this.sendToClient(client.id, {
-        type: "ERROR",
-        payload: {
-          code: ErrorCode.SESSION_NOT_FOUND,
-          message: "Session not found",
-        },
-      });
-      return;
-    }
-    if (session.dmToken !== dmToken) {
-      this.sendToClient(client.id, {
-        type: "ERROR",
-        payload: { code: ErrorCode.UNAUTHORIZED, message: "Invalid DM token" },
-      });
-      return;
-    }
-    this.store.reorderPlayers(session, orderedPlayerIds);
-    this.broadcastToSession(session.id, {
-      type: "PLAYERS_REORDERED",
-      payload: {
-        players: session.players,
-        turnState: session.turnState,
-      },
-    });
+    const session = this.requireDm(client, payload.dmToken);
+    this.store.reorderPlayers(session, payload.orderedPlayerIds);
+    this.broadcast(session.id, { type: "PLAYERS_REORDERED", payload: snapshot(session) });
   }
 
-  private handleRemovePlayer(
-    client: WsClient,
-    payload: ClientMessageMap["REMOVE_PLAYER"]
-  ): void {
-    const { dmToken, playerId } = payload;
-    if (!client.sessionId) {
-      this.sendToClient(client.id, {
-        type: "ERROR",
-        payload: { code: ErrorCode.UNAUTHORIZED, message: "Not in a session" },
-      });
-      return;
+  private handleRemovePlayer(client: WsClient, payload: ClientMessageMap["REMOVE_PLAYER"]): void {
+    const session = this.requireDm(client, payload.dmToken);
+    const removed = this.store.removePlayer(session, payload.playerId);
+    if (removed.clientId) {
+      this.send(removed.clientId, { type: "YOU_WERE_REMOVED", payload: {} });
+      this.clients.get(removed.clientId)?.ws.close(WS_CLOSE_REMOVED, "Removed from session");
     }
-    const session = this.store.findById(client.sessionId);
-    if (!session) {
-      this.sendToClient(client.id, {
-        type: "ERROR",
-        payload: {
-          code: ErrorCode.SESSION_NOT_FOUND,
-          message: "Session not found",
-        },
-      });
-      return;
-    }
-    if (session.dmToken !== dmToken) {
-      this.sendToClient(client.id, {
-        type: "ERROR",
-        payload: { code: ErrorCode.UNAUTHORIZED, message: "Invalid DM token" },
-      });
-      return;
-    }
-    const removedPlayer = session.players.find((p) => p.id === playerId);
-    if (!removedPlayer) {
-      this.sendToClient(client.id, {
-        type: "ERROR",
-        payload: {
-          code: ErrorCode.PLAYER_NOT_FOUND,
-          message: "Player not found",
-        },
-      });
-      return;
-    }
-    const removedClientId = removedPlayer.clientId;
-    this.store.removePlayer(session, playerId);
-    if (removedClientId) {
-      const removedClient = this.clients.get(removedClientId);
-      if (removedClient && removedClient.ws.readyState === WebSocket.OPEN) {
-        this.sendToClient(removedClientId, {
-          type: "YOU_WERE_REMOVED",
-          payload: {},
-        });
-        removedClient.ws.close(1000, "Removed from session");
-      }
-      this.removeClient(removedClientId);
-    }
-    this.broadcastToSession(
-      session.id,
-      {
-        type: "PLAYER_REMOVED",
-        payload: {
-          players: session.players,
-          turnState: session.turnState,
-        },
-      },
-      removedClientId ?? undefined
-    );
+    this.broadcast(session.id, { type: "PLAYER_REMOVED", payload: snapshot(session) });
   }
 
-  private handleAddNpc(
-    client: WsClient,
-    payload: ClientMessageMap["ADD_NPC"]
-  ): void {
-    const { dmToken, name, initiative } = payload;
-    if (!client.sessionId) {
-      this.sendToClient(client.id, {
-        type: "ERROR",
-        payload: { code: ErrorCode.UNAUTHORIZED, message: "Not in a session" },
-      });
-      return;
-    }
-    const session = this.store.findById(client.sessionId);
-    if (!session) {
-      this.sendToClient(client.id, {
-        type: "ERROR",
-        payload: {
-          code: ErrorCode.SESSION_NOT_FOUND,
-          message: "Session not found",
-        },
-      });
-      return;
-    }
-    if (session.dmToken !== dmToken) {
-      this.sendToClient(client.id, {
-        type: "ERROR",
-        payload: { code: ErrorCode.UNAUTHORIZED, message: "Invalid DM token" },
-      });
-      return;
-    }
-    const npcName = (name || "").trim();
-    if (npcName.length < MIN_NAME_LENGTH || npcName.length > MAX_NAME_LENGTH) {
-      this.sendToClient(client.id, {
-        type: "ERROR",
-        payload: { code: ErrorCode.INVALID_NAME, message: "Invalid name length" },
-      });
-      return;
-    }
-    const init =
-      typeof initiative === "number" ? initiative : Number(initiative);
-    if (isNaN(init) || init < MIN_INITIATIVE || init > MAX_INITIATIVE) {
-      this.sendToClient(client.id, {
-        type: "ERROR",
-        payload: {
-          code: ErrorCode.INVALID_INITIATIVE,
-          message: "Initiative out of range",
-        },
-      });
-      return;
-    }
-    const playerToken = crypto.randomUUID();
-    this.store.addNpc(session, npcName, init, playerToken);
-    this.broadcastToSession(session.id, {
-      type: "SESSION_STATE_SYNC",
-      payload: {
-        players: session.players,
-        turnState: session.turnState,
-        dmPlayerId: client.isDM ? client.playerId : undefined,
-      },
-    });
+  private handleAddNpc(client: WsClient, payload: ClientMessageMap["ADD_NPC"]): void {
+    const session = this.requireDm(client, payload.dmToken);
+    this.store.addNpc(session, validateName(payload.name), validateInitiative(payload.initiative));
+    this.broadcast(session.id, { type: "PLAYER_JOINED", payload: snapshot(session) });
   }
 
-  private handleAdvanceTurn(
+  private handleTurnCommand(
     client: WsClient,
-    payload: ClientMessageMap["ADVANCE_TURN"]
+    payload: { dmToken: string },
+    reply: "TURN_ADVANCED" | "TURN_REGRESSED" | "SESSION_RESET"
   ): void {
-    const { dmToken } = payload;
-    if (!client.sessionId) {
-      this.sendToClient(client.id, {
-        type: "ERROR",
-        payload: { code: ErrorCode.UNAUTHORIZED, message: "Not in a session" },
-      });
-      return;
-    }
-    const session = this.store.findById(client.sessionId);
-    if (!session) {
-      this.sendToClient(client.id, {
-        type: "ERROR",
-        payload: {
-          code: ErrorCode.SESSION_NOT_FOUND,
-          message: "Session not found",
-        },
-      });
-      return;
-    }
-    if (session.dmToken !== dmToken) {
-      this.sendToClient(client.id, {
-        type: "ERROR",
-        payload: { code: ErrorCode.UNAUTHORIZED, message: "Invalid DM token" },
-      });
-      return;
-    }
-    this.store.advanceTurn(session);
-    this.broadcastToSession(session.id, {
-      type: "TURN_ADVANCED",
-      payload: {
-        players: session.players,
-        turnState: session.turnState,
-      },
-    });
+    const session = this.requireDm(client, payload.dmToken);
+    if (reply === "TURN_ADVANCED") this.store.advanceTurn(session);
+    else if (reply === "TURN_REGRESSED") this.store.previousTurn(session);
+    else this.store.reset(session);
+    this.broadcast(session.id, { type: reply, payload: snapshot(session) });
   }
 
-  private handlePreviousTurn(
-    client: WsClient,
-    payload: ClientMessageMap["PREVIOUS_TURN"]
-  ): void {
-    const { dmToken } = payload;
-    if (!client.sessionId) {
-      this.sendToClient(client.id, {
-        type: "ERROR",
-        payload: { code: ErrorCode.UNAUTHORIZED, message: "Not in a session" },
-      });
-      return;
-    }
-    const session = this.store.findById(client.sessionId);
+  private findSession(roomCode: unknown): Session {
+    const session =
+      typeof roomCode === "string" ? this.store.findByCode(roomCode.trim().toUpperCase()) : undefined;
     if (!session) {
-      this.sendToClient(client.id, {
-        type: "ERROR",
-        payload: {
-          code: ErrorCode.SESSION_NOT_FOUND,
-          message: "Session not found",
-        },
-      });
-      return;
+      throw new ServerError(ErrorCode.SESSION_NOT_FOUND, "No session with that room code");
     }
-    if (session.dmToken !== dmToken) {
-      this.sendToClient(client.id, {
-        type: "ERROR",
-        payload: { code: ErrorCode.UNAUTHORIZED, message: "Invalid DM token" },
-      });
-      return;
-    }
-    this.store.previousTurn(session);
-    this.broadcastToSession(session.id, {
-      type: "TURN_REGRESSED",
-      payload: {
-        players: session.players,
-        turnState: session.turnState,
-      },
-    });
+    return session;
   }
 
-  private handleResetSession(
-    client: WsClient,
-    payload: ClientMessageMap["RESET_SESSION"]
-  ): void {
-    const { dmToken } = payload;
-    if (!client.sessionId) {
-      this.sendToClient(client.id, {
-        type: "ERROR",
-        payload: { code: ErrorCode.UNAUTHORIZED, message: "Not in a session" },
-      });
-      return;
+  /** DM commands must come from a connection bound to the session as DM, carrying its token. */
+  private requireDm(client: WsClient, dmToken: unknown): Session {
+    const binding = this.store.getBinding(client.id);
+    const session = binding ? this.store.findById(binding.sessionId) : undefined;
+    if (!binding || !session) {
+      throw new ServerError(ErrorCode.UNAUTHORIZED, "You're not connected to a session");
     }
-    const session = this.store.findById(client.sessionId);
-    if (!session) {
-      this.sendToClient(client.id, {
-        type: "ERROR",
-        payload: {
-          code: ErrorCode.SESSION_NOT_FOUND,
-          message: "Session not found",
-        },
-      });
-      return;
+    if (binding.playerId !== null || session.dmToken !== dmToken) {
+      throw new ServerError(ErrorCode.UNAUTHORIZED, "Only the DM can do that");
     }
-    if (session.dmToken !== dmToken) {
-      this.sendToClient(client.id, {
-        type: "ERROR",
-        payload: { code: ErrorCode.UNAUTHORIZED, message: "Invalid DM token" },
-      });
-      return;
-    }
-    this.store.reset(session);
-    this.broadcastToSession(session.id, {
-      type: "SESSION_RESET",
-      payload: {
-        players: session.players,
-        turnState: session.turnState,
-      },
-    });
+    return session;
   }
 
   removeClient(clientId: string): void {
-    const client = this.clients.get(clientId);
-    if (!client) return;
-    if (client.sessionId) {
-      this.store.disconnectClient(clientId);
-    }
+    if (!this.clients.has(clientId)) return;
+    this.store.unbindClient(clientId);
     this.clients.delete(clientId);
   }
 
@@ -661,18 +244,9 @@ export class WsHandler {
     }
   }
 
+  /** Expired sessions have no connected clients by definition, so eviction is enough. */
   sweepExpiredSessions(): void {
-    const expired = this.store.findExpiredSessions();
-    for (const session of expired) {
-      for (const player of session.players) {
-        if (player.clientId) {
-          const client = this.clients.get(player.clientId);
-          if (client) {
-            client.ws.close(1000, "Session expired");
-            this.removeClient(player.clientId);
-          }
-        }
-      }
+    for (const session of this.store.findExpiredSessions()) {
       this.store.evictSession(session.id);
     }
   }
@@ -681,23 +255,32 @@ export class WsHandler {
     return this.clients.size;
   }
 
-  private broadcastToSession(
-    sessionId: string,
-    message: ServerMessage,
-    excludeClientId?: string
-  ): void {
-    for (const [id, client] of this.clients) {
-      if (id === excludeClientId) continue;
-      if (
-        client.sessionId === sessionId &&
-        client.ws.readyState === WebSocket.OPEN
-      ) {
-        this.sendToClient(id, message);
+  private sendStateSync(clientId: string, session: Session, playerId: string | null): void {
+    this.send(clientId, {
+      type: "SESSION_STATE_SYNC",
+      payload: {
+        sessionId: session.id,
+        roomCode: session.roomCode,
+        isDM: playerId === null,
+        playerId,
+        ...snapshot(session),
+      },
+    });
+  }
+
+  private broadcast(sessionId: string, message: ServerMessage, excludeClientId?: string): void {
+    for (const id of this.clients.keys()) {
+      if (id !== excludeClientId && this.store.getBinding(id)?.sessionId === sessionId) {
+        this.send(id, message);
       }
     }
   }
 
-  private sendToClient(clientId: string, message: ServerMessage): void {
+  private sendError(clientId: string, code: ErrorCode, message: string): void {
+    this.send(clientId, { type: "ERROR", payload: { code, message } });
+  }
+
+  private send(clientId: string, message: ServerMessage): void {
     const client = this.clients.get(clientId);
     if (!client || client.ws.readyState !== WebSocket.OPEN) return;
     client.ws.send(JSON.stringify(message));

@@ -1,367 +1,344 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
-import { SessionStore } from "../../../src/server/sessionStore";
-import { ErrorCode, MAX_PLAYERS, MIN_NAME_LENGTH, MAX_NAME_LENGTH } from "../../../src/shared/constants";
+import { describe, it, expect, beforeEach } from "vitest";
+import { SessionStore, snapshot } from "../../../src/server/sessionStore";
+import { ErrorCode, MAX_PLAYERS, MAX_NAME_LENGTH } from "../../../src/shared/constants";
 import type { Player, Session } from "../../../src/shared/types";
 
-function createTestPlayer(overrides: Partial<Player> = {}): Player {
+let nextId = 0;
+function makePlayer(overrides: Partial<Player> = {}): Player {
+  nextId++;
   return {
-    id: overrides.id ?? "player-1",
+    id: overrides.id ?? `p${nextId}`,
     sessionId: overrides.sessionId ?? "",
-    name: overrides.name ?? "TestPlayer",
+    name: overrides.name ?? `Player${nextId}`,
     initiative: overrides.initiative ?? 10,
-    sortOrder: overrides.sortOrder ?? 0,
-    isDM: overrides.isDM ?? false,
+    isNpc: overrides.isNpc ?? false,
     clientId: overrides.clientId ?? null,
-    playerToken: overrides.playerToken ?? "token-1",
+    playerToken: overrides.playerToken ?? `token-${nextId}`,
     createdAt: overrides.createdAt ?? Date.now(),
   };
 }
 
-function currentPlayerId(session: Session): string | undefined {
-  return session.players[session.turnState.currentIndex]?.id;
+const names = (s: Session) => s.players.map((p) => p.name);
+const current = (s: Session) => s.players.find((p) => p.id === s.turnState.currentPlayerId)?.name;
+
+function expectCode(fn: () => unknown, code: ErrorCode) {
+  try {
+    fn();
+  } catch (err) {
+    expect((err as { code?: string }).code).toBe(code);
+    return;
+  }
+  throw new Error(`expected ${code} to be thrown`);
 }
 
 describe("SessionStore", () => {
   let store: SessionStore;
+  let session: Session;
+
+  /** Adds players by name and initiative, in join order. */
+  function seed(...entries: [string, number][]) {
+    for (const [name, initiative] of entries) store.addPlayer(session, makePlayer({ name, initiative }));
+  }
 
   beforeEach(() => {
     store = new SessionStore();
+    session = store.create("dm-token");
   });
 
   describe("create", () => {
-    it("returns a session with correct structure", () => {
-      const session = store.create("dm-token", "dm-player-id");
-      expect(session.id).toBeTypeOf("string");
+    it("starts empty, waiting, round 1, with no DM in the player list", () => {
       expect(session.roomCode).toHaveLength(4);
       expect(session.dmToken).toBe("dm-token");
-      expect(session.dmPlayerId).toBe("dm-player-id");
       expect(session.status).toBe("WAITING");
-      expect(session.turnState).toEqual({ currentIndex: 0, round: 1 });
-      expect(session.createdAt).toBeGreaterThan(0);
-      expect(session.lastActivityAt).toBeGreaterThan(0);
-    });
-
-    it("adds the DM player automatically", () => {
-      const session = store.create("dm-token", "dm-player-id");
-      expect(session.players).toHaveLength(1);
-      const dm = session.players[0]!;
-      expect(dm.id).toBe("dm-player-id");
-      expect(dm.name).toBe("Dungeon Master");
-      expect(dm.isDM).toBe(true);
-      expect(dm.playerToken).toBe("dm-token");
-    });
-  });
-
-  describe("findByCode", () => {
-    it("returns the session for a valid room code", () => {
-      const session = store.create("t1", "p1");
-      const found = store.findByCode(session.roomCode);
-      expect(found).toBe(session);
-    });
-
-    it("returns undefined for an unknown code", () => {
-      expect(store.findByCode("ZZZZ")).toBeUndefined();
-    });
-
-    it("finds by the exact room code used", () => {
-      const session = store.create("t1", "p1");
+      expect(session.players).toEqual([]);
+      expect(session.turnState).toEqual({ currentPlayerId: null, round: 1 });
       expect(store.findByCode(session.roomCode)).toBe(session);
+      expect(store.findById(session.id)).toBe(session);
     });
   });
 
-  describe("findById", () => {
-    it("returns the session for a valid id", () => {
-      const session = store.create("t1", "p1");
-      const found = store.findById(session.id);
-      expect(found).toBe(session);
+  describe("addPlayer / addNpc ordering", () => {
+    it("keeps the list sorted by initiative, highest first", () => {
+      seed(["Aragorn", 15], ["Gimli", 8], ["Legolas", 22]);
+      expect(names(session)).toEqual(["Legolas", "Aragorn", "Gimli"]);
     });
 
-    it("returns undefined for an unknown id", () => {
-      expect(store.findById("nonexistent")).toBeUndefined();
-    });
-  });
-
-  describe("addPlayer", () => {
-    it("adds a player to the session", () => {
-      const session = store.create("t1", "p1");
-      const player = createTestPlayer({ id: "p2", name: "Aragorn" });
-      store.addPlayer(session, player);
-      expect(session.players).toHaveLength(2);
-      expect(session.players[1]!.name).toBe("Aragorn");
+    it("breaks ties by join order", () => {
+      seed(["Aragorn", 12], ["Boromir", 12]);
+      expect(names(session)).toEqual(["Aragorn", "Boromir"]);
     });
 
-    it("sets sortOrder based on current player count", () => {
-      const session = store.create("t1", "p1");
-      const player = createTestPlayer({ id: "p2", name: "Aragorn" });
-      store.addPlayer(session, player);
-      expect(player.sortOrder).toBe(1);
+    it("sorts NPCs in with players", () => {
+      seed(["Aragorn", 15]);
+      const goblin = store.addNpc(session, "Goblin", 20);
+      expect(goblin.isNpc).toBe(true);
+      expect(goblin.playerToken).toBeNull();
+      expect(names(session)).toEqual(["Goblin", "Aragorn"]);
     });
 
-    it("throws SESSION_FULL when at max capacity", () => {
-      const session = store.create("t1", "p1");
-      for (let i = 0; i < MAX_PLAYERS - 1; i++) {
-        store.addPlayer(session, createTestPlayer({ id: `p${i + 2}`, name: `Player${i}` }));
-      }
-      expect(session.players).toHaveLength(MAX_PLAYERS);
-      expect(() =>
-        store.addPlayer(session, createTestPlayer({ id: "extra", name: "Extra" }))
-      ).toThrow(ErrorCode.SESSION_FULL);
+    it("inserts newcomers without undoing the DM's manual reorder", () => {
+      seed(["Aragorn", 15], ["Gimli", 8]);
+      store.reorderPlayers(session, [session.players[1]!.id, session.players[0]!.id]);
+      seed(["Legolas", 22]);
+      expect(names(session)).toEqual(["Legolas", "Gimli", "Aragorn"]);
     });
 
-    it("throws INVALID_NAME for empty name", () => {
-      const session = store.create("t1", "p1");
-      expect(() =>
-        store.addPlayer(session, createTestPlayer({ id: "p2", name: "" }))
-      ).toThrow(ErrorCode.INVALID_NAME);
+    it("rejects a full session", () => {
+      for (let i = 0; i < MAX_PLAYERS; i++) seed([`P${i}`, 10]);
+      expectCode(() => seed(["Late", 10]), ErrorCode.SESSION_FULL);
     });
 
-    it("throws INVALID_NAME for name exceeding max length", () => {
-      const session = store.create("t1", "p1");
-      expect(() =>
-        store.addPlayer(session, createTestPlayer({ id: "p2", name: "A".repeat(MAX_NAME_LENGTH + 1) }))
-      ).toThrow(ErrorCode.INVALID_NAME);
+    it("rejects empty and over-long names", () => {
+      expectCode(() => seed(["   ", 10]), ErrorCode.INVALID_NAME);
+      expectCode(() => seed(["x".repeat(MAX_NAME_LENGTH + 1), 10]), ErrorCode.INVALID_NAME);
     });
 
-    it("throws NAME_TAKEN for duplicate names (case-insensitive)", () => {
-      const session = store.create("t1", "p1");
-      store.addPlayer(session, createTestPlayer({ id: "p2", name: "Aragorn" }));
-      expect(() =>
-        store.addPlayer(session, createTestPlayer({ id: "p3", name: "aragorn" }))
-      ).toThrow(ErrorCode.NAME_TAKEN);
-    });
-  });
-
-  describe("removePlayer", () => {
-    it("removes a player from the session", () => {
-      const session = store.create("t1", "p1");
-      store.addPlayer(session, createTestPlayer({ id: "p2", name: "Aragorn" }));
-      store.removePlayer(session, "p2");
-      expect(session.players).toHaveLength(1);
-      expect(session.players.find((p) => p.id === "p2")).toBeUndefined();
+    it("rejects duplicate names, case-insensitively, including NPCs", () => {
+      seed(["Aragorn", 10]);
+      expectCode(() => seed(["aragorn", 5]), ErrorCode.NAME_TAKEN);
+      expectCode(() => store.addNpc(session, "ARAGORN", 5), ErrorCode.NAME_TAKEN);
     });
 
-    it("re-sortOrders after removal", () => {
-      const session = store.create("t1", "p1");
-      store.addPlayer(session, createTestPlayer({ id: "p2", name: "Aragorn" }));
-      store.addPlayer(session, createTestPlayer({ id: "p3", name: "Legolas" }));
-      store.removePlayer(session, "p2");
-      expect(session.players[0]!.sortOrder).toBe(0);
-      expect(session.players[1]!.sortOrder).toBe(1);
-    });
-
-    it("does nothing when player not found", () => {
-      const session = store.create("t1", "p1");
-      expect(() => store.removePlayer(session, "nonexistent")).not.toThrow();
-    });
-
-    it("cleans up client mappings when player has clientId", () => {
-      const session = store.create("t1", "p1");
-      const player = createTestPlayer({ id: "p2", name: "Aragorn", clientId: "client-1" });
-      store.addPlayer(session, player);
-      store.registerClient("client-1", session.id, "p2");
-      store.removePlayer(session, "p2");
-      expect(session.players).toHaveLength(1);
+    it("rejects out-of-range or fractional initiative", () => {
+      expectCode(() => seed(["A", 99]), ErrorCode.INVALID_INITIATIVE);
+      expectCode(() => seed(["B", 2.5]), ErrorCode.INVALID_INITIATIVE);
     });
   });
 
   describe("updateInitiative", () => {
-    it("updates player initiative and re-sorts descending", () => {
-      const session = store.create("t1", "p1");
-      store.addPlayer(session, createTestPlayer({ id: "p2", name: "Slow", initiative: 5, createdAt: 100 }));
-      store.addPlayer(session, createTestPlayer({ id: "p3", name: "Fast", initiative: 20, createdAt: 200 }));
-      store.updateInitiative(session, "p2", 25);
-      expect(session.players[0]!.id).toBe("p2");
-      expect(session.players[0]!.initiative).toBe(25);
+    it("moves the player to their new place in the order", () => {
+      seed(["Aragorn", 15], ["Gimli", 8], ["Legolas", 22]);
+      const gimli = session.players.find((p) => p.name === "Gimli")!;
+      store.updateInitiative(session, gimli.id, 30);
+      expect(names(session)).toEqual(["Gimli", "Legolas", "Aragorn"]);
     });
 
-    it("breaks ties by join order (createdAt)", () => {
-      const session = store.create("t1", "p1");
-      store.addPlayer(session, createTestPlayer({ id: "p2", name: "First", initiative: 10, createdAt: 100 }));
-      store.addPlayer(session, createTestPlayer({ id: "p3", name: "Second", initiative: 10, createdAt: 200 }));
-      expect(session.players[1]!.id).toBe("p2");
-      expect(session.players[2]!.id).toBe("p3");
+    it("keeps the turn with the same player when the order changes", () => {
+      seed(["Aragorn", 15], ["Gimli", 8], ["Legolas", 22]);
+      store.advanceTurn(session); // Legolas -> Aragorn
+      const gimli = session.players.find((p) => p.name === "Gimli")!;
+      store.updateInitiative(session, gimli.id, 30);
+      expect(current(session)).toBe("Aragorn");
     });
 
-    it("throws INVALID_INITIATIVE for out-of-range values", () => {
-      const session = store.create("t1", "p1");
-      expect(() => store.updateInitiative(session, "p1", -11)).toThrow(ErrorCode.INVALID_INITIATIVE);
-      expect(() => store.updateInitiative(session, "p1", 41)).toThrow(ErrorCode.INVALID_INITIATIVE);
-    });
-
-    it("throws PLAYER_NOT_FOUND for unknown playerId", () => {
-      const session = store.create("t1", "p1");
-      expect(() => store.updateInitiative(session, "nonexistent", 10)).toThrow(ErrorCode.PLAYER_NOT_FOUND);
+    it("rejects unknown players and bad values", () => {
+      seed(["Aragorn", 15]);
+      expectCode(() => store.updateInitiative(session, "nope", 10), ErrorCode.PLAYER_NOT_FOUND);
+      expectCode(
+        () => store.updateInitiative(session, session.players[0]!.id, 100),
+        ErrorCode.INVALID_INITIATIVE
+      );
     });
   });
 
   describe("reorderPlayers", () => {
-    it("reorders players according to provided ids", () => {
-      const session = store.create("t1", "p1");
-      store.addPlayer(session, createTestPlayer({ id: "p2", name: "Aragorn" }));
-      store.addPlayer(session, createTestPlayer({ id: "p3", name: "Legolas" }));
-      store.reorderPlayers(session, ["p3", "p2", "p1"]);
-      expect(session.players[0]!.id).toBe("p3");
-      expect(session.players[1]!.id).toBe("p2");
-      expect(session.players[2]!.id).toBe("p1");
+    it("applies the DM's order", () => {
+      seed(["Aragorn", 15], ["Gimli", 8]);
+      const [a, g] = session.players;
+      store.reorderPlayers(session, [g!.id, a!.id]);
+      expect(names(session)).toEqual(["Gimli", "Aragorn"]);
     });
 
-    it("sets sortOrder correctly after reorder", () => {
-      const session = store.create("t1", "p1");
-      store.addPlayer(session, createTestPlayer({ id: "p2", name: "Aragorn" }));
-      store.reorderPlayers(session, ["p2", "p1"]);
-      expect(session.players[0]!.sortOrder).toBe(0);
-      expect(session.players[1]!.sortOrder).toBe(1);
-    });
-
-    it("throws PLAYER_NOT_FOUND for unknown id", () => {
-      const session = store.create("t1", "p1");
-      expect(() => store.reorderPlayers(session, ["unknown"])).toThrow(ErrorCode.PLAYER_NOT_FOUND);
-    });
-
-    it("throws INVALID_NAME for duplicate ids", () => {
-      const session = store.create("t1", "p1");
-      expect(() => store.reorderPlayers(session, ["p1", "p1"])).toThrow(ErrorCode.INVALID_NAME);
-    });
-
-    it("throws INVALID_NAME for mismatched count", () => {
-      const session = store.create("t1", "p1");
-      expect(() => store.reorderPlayers(session, [])).toThrow(ErrorCode.INVALID_NAME);
+    it("rejects lists that don't exactly match the players", () => {
+      seed(["Aragorn", 15], ["Gimli", 8]);
+      const [a] = session.players;
+      expectCode(() => store.reorderPlayers(session, [a!.id]), ErrorCode.INVALID_REORDER);
+      expectCode(() => store.reorderPlayers(session, [a!.id, a!.id]), ErrorCode.INVALID_REORDER);
+      expectCode(() => store.reorderPlayers(session, [a!.id, "x"]), ErrorCode.INVALID_REORDER);
+      expectCode(() => store.reorderPlayers(session, "junk"), ErrorCode.INVALID_REORDER);
+      expect(names(session)).toEqual(["Aragorn", "Gimli"]);
     });
   });
 
-  describe("advanceTurn", () => {
-    it("advances to next player", () => {
-      const session = store.create("t1", "p1");
-      store.addPlayer(session, createTestPlayer({ id: "p2", name: "Aragorn" }));
-      store.addPlayer(session, createTestPlayer({ id: "p3", name: "Legolas" }));
-      expect(currentPlayerId(session)).toBe("p2");
+  describe("turns", () => {
+    it("before combat starts, the turn is whoever is at the top", () => {
+      seed(["Aragorn", 15]);
+      expect(current(session)).toBe("Aragorn");
+      seed(["Legolas", 22]);
+      expect(current(session)).toBe("Legolas");
+    });
+
+    it("Next walks down the order", () => {
+      seed(["Legolas", 22], ["Aragorn", 15], ["Gimli", 8]);
       store.advanceTurn(session);
-      expect(currentPlayerId(session)).toBe("p3");
+      expect(current(session)).toBe("Aragorn");
+      store.advanceTurn(session);
+      expect(current(session)).toBe("Gimli");
       expect(session.turnState.round).toBe(1);
     });
 
-    it("loops from the last player back to the top and increments round", () => {
-      const session = store.create("t1", "p1");
-      store.addPlayer(session, createTestPlayer({ id: "p2", name: "Aragorn" }));
-      store.addPlayer(session, createTestPlayer({ id: "p3", name: "Legolas" }));
+    it("Next after the last entry loops to the top and starts a new round", () => {
+      seed(["Legolas", 22], ["Aragorn", 15]);
       store.advanceTurn(session);
       store.advanceTurn(session);
-      expect(currentPlayerId(session)).toBe("p2");
+      expect(current(session)).toBe("Legolas");
       expect(session.turnState.round).toBe(2);
     });
 
-    it("never gives the turn to the DM", () => {
-      const session = store.create("t1", "p1");
-      store.addPlayer(session, createTestPlayer({ id: "p2", name: "Aragorn" }));
+    it("Next with a single entry keeps it and advances the round", () => {
+      seed(["Aragorn", 15]);
       store.advanceTurn(session);
-      expect(currentPlayerId(session)).toBe("p2");
+      expect(current(session)).toBe("Aragorn");
       expect(session.turnState.round).toBe(2);
     });
 
-    it("does nothing with no players", () => {
-      const store2 = new SessionStore();
-      const session = store2.create("t1", "p1");
-      session.players = [];
-      store2.advanceTurn(session);
-      expect(session.turnState.currentIndex).toBe(0);
+    it("Previous walks back, wrapping to the bottom of the previous round", () => {
+      seed(["Legolas", 22], ["Aragorn", 15]);
+      store.advanceTurn(session);
+      store.advanceTurn(session); // round 2, Legolas
+      store.previousTurn(session);
+      expect(current(session)).toBe("Aragorn");
       expect(session.turnState.round).toBe(1);
     });
-  });
 
-  describe("previousTurn", () => {
-    it("moves to previous player", () => {
-      const session = store.create("t1", "p1");
-      store.addPlayer(session, createTestPlayer({ id: "p2", name: "Aragorn" }));
-      store.addPlayer(session, createTestPlayer({ id: "p3", name: "Legolas" }));
+    it("Previous never takes the round below 1", () => {
+      seed(["Legolas", 22], ["Aragorn", 15]);
+      store.previousTurn(session);
+      expect(current(session)).toBe("Aragorn");
+      expect(session.turnState.round).toBe(1);
+    });
+
+    it("a newcomer sorting above the current player doesn't steal the turn mid-combat", () => {
+      seed(["Aragorn", 15], ["Gimli", 8]);
+      store.advanceTurn(session); // Gimli
+      seed(["Legolas", 22]);
+      expect(current(session)).toBe("Gimli");
+    });
+
+    it("Next and Previous do nothing on an empty list", () => {
       store.advanceTurn(session);
       store.previousTurn(session);
-      expect(currentPlayerId(session)).toBe("p2");
-      expect(session.turnState.round).toBe(1);
-    });
-
-    it("wraps backward to the last player and floors round at 1", () => {
-      const session = store.create("t1", "p1");
-      store.addPlayer(session, createTestPlayer({ id: "p2", name: "Aragorn" }));
-      store.addPlayer(session, createTestPlayer({ id: "p3", name: "Legolas" }));
-      store.previousTurn(session);
-      expect(currentPlayerId(session)).toBe("p3");
-      expect(session.turnState.round).toBe(1);
-    });
-
-    it("does nothing with no players", () => {
-      const store2 = new SessionStore();
-      const session = store2.create("t1", "p1");
-      session.players = [];
-      store2.previousTurn(session);
-      expect(session.turnState.currentIndex).toBe(0);
-      expect(session.turnState.round).toBe(1);
+      expect(session.turnState).toEqual({ currentPlayerId: null, round: 1 });
     });
   });
 
-  describe("reset", () => {
-    it("resets turn state and status", () => {
-      const session = store.create("t1", "p1");
-      session.status = "ACTIVE";
-      session.turnState = { currentIndex: 3, round: 5 };
+  describe("removePlayer", () => {
+    it("removes the player", () => {
+      seed(["Aragorn", 15], ["Gimli", 8]);
+      store.removePlayer(session, session.players[0]!.id);
+      expect(names(session)).toEqual(["Gimli"]);
+    });
+
+    it("passes the turn to the next entry when the current player is removed", () => {
+      seed(["Legolas", 22], ["Aragorn", 15], ["Gimli", 8]);
+      store.advanceTurn(session); // Aragorn
+      store.removePlayer(session, session.turnState.currentPlayerId!);
+      expect(current(session)).toBe("Gimli");
+      expect(session.turnState.round).toBe(1);
+    });
+
+    it("wraps to the top and starts a new round when the last entry is removed on its turn", () => {
+      seed(["Legolas", 22], ["Aragorn", 15]);
+      store.advanceTurn(session); // Aragorn
+      store.removePlayer(session, session.turnState.currentPlayerId!);
+      expect(current(session)).toBe("Legolas");
+      expect(session.turnState.round).toBe(2);
+    });
+
+    it("keeps the turn where it is when someone else is removed", () => {
+      seed(["Legolas", 22], ["Aragorn", 15], ["Gimli", 8]);
+      store.advanceTurn(session); // Aragorn
+      store.removePlayer(session, session.players[0]!.id);
+      expect(current(session)).toBe("Aragorn");
+    });
+
+    it("rejects unknown players", () => {
+      expectCode(() => store.removePlayer(session, "nope"), ErrorCode.PLAYER_NOT_FOUND);
+    });
+  });
+
+  describe("reset (new combat)", () => {
+    it("returns to round 1 with the turn at the top of the order", () => {
+      seed(["Legolas", 22], ["Aragorn", 15]);
+      store.advanceTurn(session);
+      store.advanceTurn(session);
+      store.advanceTurn(session);
       store.reset(session);
-      expect(session.turnState).toEqual({ currentIndex: 0, round: 1 });
       expect(session.status).toBe("WAITING");
+      expect(session.turnState.round).toBe(1);
+      expect(current(session)).toBe("Legolas");
     });
   });
 
-  describe("registerClient / disconnectClient", () => {
-    it("registerClient associates client with session and player", () => {
-      const session = store.create("t1", "p1");
-      store.registerClient("client-1", session.id, "p1");
-      expect(session.players[0]!.clientId).toBe("client-1");
+  describe("client bindings", () => {
+    it("binds the DM and players", () => {
+      seed(["Aragorn", 15]);
+      const aragorn = session.players[0]!;
+      store.bindClient("c-dm", session, null);
+      store.bindClient("c-1", session, aragorn.id);
+      expect(session.dmClientId).toBe("c-dm");
+      expect(aragorn.clientId).toBe("c-1");
+      expect(store.getBinding("c-1")).toEqual({ sessionId: session.id, playerId: aragorn.id });
     });
 
-    it("disconnectClient clears clientId and mappings", () => {
-      const session = store.create("t1", "p1");
-      store.registerClient("client-1", session.id, "p1");
-      store.disconnectClient("client-1");
-      expect(session.players[0]!.clientId).toBeNull();
+    it("a stale connection closing doesn't detach a player who already reconnected", () => {
+      seed(["Aragorn", 15]);
+      const aragorn = session.players[0]!;
+      store.bindClient("old", session, aragorn.id);
+      store.bindClient("new", session, aragorn.id);
+      store.unbindClient("old");
+      expect(aragorn.clientId).toBe("new");
     });
 
-    it("disconnectClient is safe for unknown client", () => {
-      expect(() => store.disconnectClient("unknown")).not.toThrow();
+    it("same for the DM", () => {
+      store.bindClient("old", session, null);
+      store.bindClient("new", session, null);
+      store.unbindClient("old");
+      expect(session.dmClientId).toBe("new");
+    });
+
+    it("rebinding a connection releases its previous binding", () => {
+      const other = store.create("t2");
+      store.bindClient("c", session, null);
+      store.bindClient("c", other, null);
+      expect(session.dmClientId).toBeNull();
+      expect(store.getBinding("c")?.sessionId).toBe(other.id);
+    });
+
+    it("removing a player releases their connection", () => {
+      seed(["Aragorn", 15]);
+      store.bindClient("c-1", session, session.players[0]!.id);
+      store.removePlayer(session, session.players[0]!.id);
+      expect(store.getBinding("c-1")).toBeUndefined();
     });
   });
 
-  describe("findExpiredSessions", () => {
-    it("returns sessions past expiry with no connected clients", () => {
-      const session = store.create("t1", "p1");
+  describe("expiry", () => {
+    it("expires idle sessions with nobody connected", () => {
       session.lastActivityAt = Date.now() - 7_200_001;
-      const expired = store.findExpiredSessions();
-      expect(expired).toContain(session);
-    });
-
-    it("does not return sessions with connected clients", () => {
-      const session = store.create("t1", "p1");
-      store.registerClient("client-1", session.id, "p1");
-      session.lastActivityAt = Date.now() - 7_200_001;
-      const expired = store.findExpiredSessions();
-      expect(expired).not.toContain(session);
-    });
-
-    it("does not return active sessions", () => {
-      const session = store.create("t1", "p1");
-      const expired = store.findExpiredSessions();
-      expect(expired).not.toContain(session);
-    });
-  });
-
-  describe("evictSession", () => {
-    it("removes session from all maps", () => {
-      const session = store.create("t1", "p1");
-      const code = session.roomCode;
+      expect(store.findExpiredSessions()).toEqual([session]);
       store.evictSession(session.id);
-      expect(store.findByCode(code)).toBeUndefined();
       expect(store.findById(session.id)).toBeUndefined();
+      expect(store.findByCode(session.roomCode)).toBeUndefined();
     });
 
-    it("is safe for unknown session", () => {
-      expect(() => store.evictSession("unknown")).not.toThrow();
+    it("keeps idle sessions while the DM is connected", () => {
+      store.bindClient("c-dm", session, null);
+      session.lastActivityAt = Date.now() - 7_200_001;
+      expect(store.findExpiredSessions()).toEqual([]);
+    });
+
+    it("keeps idle sessions while a player is connected", () => {
+      seed(["Aragorn", 15]);
+      store.bindClient("c-1", session, session.players[0]!.id);
+      session.lastActivityAt = Date.now() - 7_200_001;
+      expect(store.findExpiredSessions()).toEqual([]);
+    });
+  });
+
+  describe("snapshot", () => {
+    it("never exposes tokens or connection ids", () => {
+      seed(["Aragorn", 15]);
+      store.bindClient("c-1", session, session.players[0]!.id);
+      const json = JSON.stringify(snapshot(session));
+      expect(json).not.toContain("token");
+      expect(json).not.toContain("c-1");
+      expect(snapshot(session).players[0]).toEqual({
+        id: session.players[0]!.id,
+        name: "Aragorn",
+        initiative: 15,
+        isNpc: false,
+      });
     });
   });
 });

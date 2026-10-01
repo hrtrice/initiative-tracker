@@ -1,14 +1,14 @@
-import type { Session, Player, TurnState } from "@shared/types";
+import type { Session, Player, PlayerView, TurnState } from "@shared/types";
 import type { ClientMessage, ServerMessage } from "@shared/messages";
 import type { ConnectionStatus } from "./wsClient";
 
-export type { Session, Player, TurnState, ClientMessage, ServerMessage };
+export type { Session, Player, PlayerView, TurnState, ClientMessage, ServerMessage };
 export * from "@shared/constants";
 
 export interface SessionState {
   sessionId: string | null;
   roomCode: string | null;
-  players: Player[];
+  players: PlayerView[];
   turnState: TurnState | null;
   isDM: boolean;
   playerId: string | null;

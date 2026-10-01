@@ -1,4 +1,4 @@
-import type { Player, TurnState } from "./types";
+import type { PlayerView, TurnState } from "./types";
 import { ErrorCode } from "./constants";
 
 // ---------------------------------------------------------------------------
@@ -86,50 +86,62 @@ export interface SessionCreatedPayload {
   roomCode: string;
   dmToken: string;
   sessionId: string;
-  players: Player[];
+  players: PlayerView[];
   turnState: TurnState;
 }
 
 export interface JoinAcceptedPayload {
+  sessionId: string;
+  roomCode: string;
   playerId: string;
   playerToken: string;
-  players: Player[];
+  players: PlayerView[];
   turnState: TurnState;
 }
 
+/** Reply to RECONNECT_SESSION / RECOVER_SESSION: who you are plus the full state. */
 export interface SessionStateSyncPayload {
-  players: Player[];
+  sessionId: string;
+  roomCode: string;
+  players: PlayerView[];
   turnState: TurnState;
-  dmPlayerId?: string;
+  isDM: boolean;
+  /** Your own player id; null for the DM. */
+  playerId: string | null;
+}
+
+export interface PlayerJoinedPayload {
+  players: PlayerView[];
+  turnState: TurnState;
 }
 
 export interface InitiativeUpdatedPayload {
-  players: Player[];
+  players: PlayerView[];
   turnState: TurnState;
 }
 
 export interface PlayersReorderedPayload {
-  players: Player[];
+  players: PlayerView[];
   turnState: TurnState;
 }
 
 export interface PlayerRemovedPayload {
-  players: Player[];
+  players: PlayerView[];
   turnState: TurnState;
 }
 
 export interface TurnAdvancedPayload {
-  players: Player[];
+  players: PlayerView[];
   turnState: TurnState;
 }
 
 export interface TurnRegressedPayload {
-  players: Player[];
+  players: PlayerView[];
   turnState: TurnState;
 }
 
 export interface SessionResetPayload {
-  players: Player[];
+  players: PlayerView[];
   turnState: TurnState;
 }
 
@@ -150,6 +162,7 @@ export interface ServerMessageMap {
   SESSION_CREATED: SessionCreatedPayload;
   JOIN_ACCEPTED: JoinAcceptedPayload;
   SESSION_STATE_SYNC: SessionStateSyncPayload;
+  PLAYER_JOINED: PlayerJoinedPayload;
   INITIATIVE_UPDATED: InitiativeUpdatedPayload;
   PLAYERS_REORDERED: PlayersReorderedPayload;
   PLAYER_REMOVED: PlayerRemovedPayload;

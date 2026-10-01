@@ -3,6 +3,7 @@ import { ErrorCode } from "@shared/constants";
 
 type MessageHandler = (msg: ServerMessage) => void;
 type StatusHandler = (status: ConnectionStatus) => void;
+type OpenHandler = () => void;
 
 export type ConnectionStatus = "disconnected" | "connecting" | "connected" | "reconnecting";
 
@@ -10,96 +11,111 @@ const MAX_RECONNECT_ATTEMPTS = 10;
 const INITIAL_RECONNECT_DELAY = 1000;
 const MAX_RECONNECT_DELAY = 30000;
 
+/** Close codes 4000-4999 are the server telling us not to come back (e.g. removed by the DM). */
+function isTerminalClose(code: number): boolean {
+  return code >= 4000 && code < 5000;
+}
+
+/** One persistent connection to /ws that reconnects with backoff after unexpected drops. */
 export class WsClient {
   private ws: WebSocket | null = null;
-  private url: string = "";
   private reconnectAttempts = 0;
   private reconnectDelay = INITIAL_RECONNECT_DELAY;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private messageHandlers: Set<MessageHandler> = new Set();
   private statusHandlers: Set<StatusHandler> = new Set();
+  private openHandlers: Set<OpenHandler> = new Set();
   private _status: ConnectionStatus = "disconnected";
   private intentionalClose = false;
   private messageQueue: string[] = [];
 
-  connect(roomCode: string, token?: string, isDM?: boolean): void {
+  /** Opens the connection now if there isn't one open or opening. Safe to call repeatedly. */
+  connect(): void {
+    if (
+      this.ws &&
+      (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)
+    ) {
+      return;
+    }
     this.intentionalClose = false;
+    this.clearReconnectTimer();
     this.reconnectAttempts = 0;
     this.reconnectDelay = INITIAL_RECONNECT_DELAY;
-
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const host = window.location.host;
-    const params = new URLSearchParams({ roomCode });
-    if (token) params.set("token", token);
-    if (isDM) params.set("dm", "true");
-    this.url = `${protocol}//${host}/ws?${params}`;
-
-    if (this.ws) {
-      this.ws.close();
-      this.ws = null;
-    }
-
     this.setStatus("connecting");
-    this._connect();
+    this.open();
   }
 
-  private _connect(): void {
+  private open(): void {
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    let ws: WebSocket;
     try {
-      this.ws = new WebSocket(this.url);
+      ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
     } catch {
       this.scheduleReconnect();
       return;
     }
+    this.ws = ws;
 
-    this.ws.onopen = () => {
+    // Every handler ignores events from a socket that has since been replaced.
+    ws.onopen = () => {
+      if (this.ws !== ws) return;
       this.reconnectAttempts = 0;
       this.reconnectDelay = INITIAL_RECONNECT_DELAY;
       this.setStatus("connected");
+      // Open handlers (session re-binding) must reach the server before queued commands.
+      this.openHandlers.forEach((h) => h());
       this.flushQueue();
     };
 
-    this.ws.onmessage = (event) => {
+    ws.onmessage = (event) => {
+      if (this.ws !== ws) return;
       this.handleMessage(event);
     };
 
-    this.ws.onclose = () => {
-      if (!this.intentionalClose) {
-        this.scheduleReconnect();
-      } else {
-        this.ws = null;
+    ws.onclose = (event) => {
+      if (this.ws !== ws) return;
+      this.ws = null;
+      if (this.intentionalClose || isTerminalClose(event.code)) {
+        this.messageQueue = [];
         this.setStatus("disconnected");
+      } else {
+        this.scheduleReconnect();
       }
-    };
-
-    this.ws.onerror = () => {
-      // onclose will fire after onerror
     };
   }
 
   private scheduleReconnect(): void {
     if (this.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-      this.ws = null;
       this.setStatus("disconnected");
-      this.messageHandlers.forEach((h) =>
-        h({ type: "ERROR", payload: { code: ErrorCode.UNKNOWN_ERROR, message: "Could not connect to server. Please check your connection and try again." } })
-      );
+      this.emit({
+        type: "ERROR",
+        payload: {
+          code: ErrorCode.UNKNOWN_ERROR,
+          message: "Could not connect to server. Please check your connection and try again.",
+        },
+      });
       return;
     }
 
     this.setStatus("reconnecting");
-
     this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
       this.reconnectAttempts++;
-      this._connect();
+      this.open();
     }, this.reconnectDelay);
-
     this.reconnectDelay = Math.min(this.reconnectDelay * 2, MAX_RECONNECT_DELAY);
   }
 
+  private clearReconnectTimer(): void {
+    if (this.reconnectTimer !== null) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+  }
+
   private flushQueue(): void {
-    while (this.messageQueue.length > 0) {
-      const msg = this.messageQueue.shift()!;
-      this.ws?.send(msg);
+    while (this.messageQueue.length > 0 && this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(this.messageQueue.shift()!);
     }
   }
 
@@ -108,13 +124,15 @@ export class WsClient {
     this.statusHandlers.forEach((h) => h(status));
   }
 
+  /** Sends now if open; otherwise queues the message and makes sure a connection is on its way. */
   send(msg: ClientMessage): void {
     const data = JSON.stringify(msg);
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(data);
-    } else if (!this.intentionalClose) {
-      this.messageQueue.push(data);
+      return;
     }
+    this.messageQueue.push(data);
+    if (this._status === "disconnected") this.connect();
   }
 
   onMessage(handler: MessageHandler): () => void {
@@ -127,17 +145,19 @@ export class WsClient {
     return () => this.statusHandlers.delete(handler);
   }
 
+  /** Runs on every successful (re)connect, before queued messages are flushed. */
+  onOpen(handler: OpenHandler): () => void {
+    this.openHandlers.add(handler);
+    return () => this.openHandlers.delete(handler);
+  }
+
   disconnect(): void {
     this.intentionalClose = true;
-    if (this.reconnectTimer !== null) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
-    }
+    this.clearReconnectTimer();
     this.messageQueue = [];
-    if (this.ws) {
-      this.ws.close();
-      this.ws = null;
-    }
+    const ws = this.ws;
+    this.ws = null;
+    ws?.close();
     this.setStatus("disconnected");
   }
 
@@ -145,12 +165,17 @@ export class WsClient {
     return this._status;
   }
 
+  private emit(msg: ServerMessage): void {
+    this.messageHandlers.forEach((h) => h(msg));
+  }
+
   private handleMessage(event: MessageEvent): void {
+    let data: ServerMessage;
     try {
-      const data = JSON.parse(event.data) as ServerMessage;
-      this.messageHandlers.forEach((h) => h(data));
+      data = JSON.parse(event.data) as ServerMessage;
     } catch {
-      // Ignore malformed messages
+      return; // Ignore malformed messages
     }
+    this.emit(data);
   }
 }

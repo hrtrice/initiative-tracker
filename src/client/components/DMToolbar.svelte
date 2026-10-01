@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { MAX_NAME_LENGTH, MIN_INITIATIVE, MAX_INITIATIVE } from "../lib/types";
+
   let {
     isDM = false,
     roomCode,
@@ -73,14 +75,14 @@
           type="text"
           bind:value={npcName}
           placeholder="NPC name"
-          maxlength={20}
+          maxlength={MAX_NAME_LENGTH}
         />
         <input
           type="number"
           bind:value={npcInitiative}
           placeholder="Init"
-          min={-10}
-          max={30}
+          min={MIN_INITIATIVE}
+          max={MAX_INITIATIVE}
         />
         <button class="btn-primary" onclick={handleAddNpc}>Add</button>
       </div>

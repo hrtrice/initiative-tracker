@@ -1,9 +1,58 @@
 import { WsClient } from "../lib/wsClient";
 import type { ConnectionStatus } from "../lib/wsClient";
 import type { SessionState } from "../lib/types";
-import type { ServerMessage } from "@shared/messages";
+import type { ClientMessage, ServerMessage } from "@shared/messages";
+import { ErrorCode } from "@shared/constants";
 
-let wsClient = new WsClient();
+const wsClient = new WsClient();
+
+/** What this tab needs to rejoin its session after a refresh or a dropped connection. */
+type Credentials =
+  | { role: "dm"; roomCode: string; dmToken: string }
+  | { role: "player"; roomCode: string; playerToken: string };
+
+const CREDENTIALS_KEY = "initiativeTracker.credentials";
+
+function loadCredentials(): Credentials | null {
+  try {
+    const raw = sessionStorage.getItem(CREDENTIALS_KEY);
+    return raw ? (JSON.parse(raw) as Credentials) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveCredentials(creds: Credentials): void {
+  try {
+    sessionStorage.setItem(CREDENTIALS_KEY, JSON.stringify(creds));
+  } catch {
+    // Storage unavailable (private mode); the session still works until refresh.
+  }
+}
+
+function clearCredentials(): void {
+  try {
+    sessionStorage.removeItem(CREDENTIALS_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+/** Errors in reply to a rebind that mean the stored session is gone for good. */
+const SESSION_GONE_CODES = new Set<ErrorCode>([
+  ErrorCode.SESSION_NOT_FOUND,
+  ErrorCode.PLAYER_NOT_FOUND,
+  ErrorCode.UNAUTHORIZED,
+]);
+
+type DmCommand = Exclude<
+  ClientMessage,
+  { type: "CREATE_SESSION" | "JOIN_SESSION" | "RECONNECT_SESSION" | "RECOVER_SESSION" }
+>;
+type DmCommandPayload<T extends DmCommand["type"]> = Omit<
+  Extract<DmCommand, { type: T }>["payload"],
+  "dmToken"
+>;
 
 export function createSessionState() {
   let state = $state<SessionState>({
@@ -19,33 +68,66 @@ export function createSessionState() {
     connectionStatus: "disconnected" as ConnectionStatus,
   });
 
+  /** True between sending a rebind and hearing back, so its errors can be told apart. */
+  let rebinding = false;
+
+  function leaveSessionState(error: string | null) {
+    clearCredentials();
+    state.sessionId = null;
+    state.roomCode = null;
+    state.players = [];
+    state.turnState = null;
+    state.isDM = false;
+    state.playerId = null;
+    state.playerToken = null;
+    state.dmToken = null;
+    state.error = error;
+  }
+
   function handleMessage(msg: ServerMessage) {
     switch (msg.type) {
       case "SESSION_CREATED":
         state.sessionId = msg.payload.sessionId;
         state.roomCode = msg.payload.roomCode;
         state.dmToken = msg.payload.dmToken;
+        state.playerToken = null;
+        state.playerId = null;
+        state.isDM = true;
         state.players = msg.payload.players;
         state.turnState = msg.payload.turnState;
-        state.isDM = true;
-        sessionStorage.setItem("dmToken", msg.payload.dmToken);
-        sessionStorage.setItem("roomCode", msg.payload.roomCode);
+        state.error = null;
+        saveCredentials({ role: "dm", roomCode: msg.payload.roomCode, dmToken: msg.payload.dmToken });
         break;
       case "JOIN_ACCEPTED":
+        state.sessionId = msg.payload.sessionId;
+        state.roomCode = msg.payload.roomCode;
         state.playerId = msg.payload.playerId;
         state.playerToken = msg.payload.playerToken;
+        state.dmToken = null;
+        state.isDM = false;
         state.players = msg.payload.players;
         state.turnState = msg.payload.turnState;
-        sessionStorage.setItem("playerToken", msg.payload.playerToken);
+        state.error = null;
+        saveCredentials({
+          role: "player",
+          roomCode: msg.payload.roomCode,
+          playerToken: msg.payload.playerToken,
+        });
         break;
-      case "SESSION_STATE_SYNC":
+      case "SESSION_STATE_SYNC": {
+        rebinding = false;
+        const creds = loadCredentials();
+        state.sessionId = msg.payload.sessionId;
+        state.roomCode = msg.payload.roomCode;
+        state.isDM = msg.payload.isDM;
+        state.playerId = msg.payload.playerId;
+        state.dmToken = creds?.role === "dm" ? creds.dmToken : null;
+        state.playerToken = creds?.role === "player" ? creds.playerToken : null;
         state.players = msg.payload.players;
         state.turnState = msg.payload.turnState;
-        if (msg.payload.dmPlayerId) {
-          state.isDM = true;
-          state.dmToken = sessionStorage.getItem("dmToken");
-        }
         break;
+      }
+      case "PLAYER_JOINED":
       case "INITIATIVE_UPDATED":
       case "PLAYERS_REORDERED":
       case "PLAYER_REMOVED":
@@ -56,78 +138,83 @@ export function createSessionState() {
         state.turnState = msg.payload.turnState;
         break;
       case "ERROR":
-        state.error = msg.payload.message;
+        if (rebinding && SESSION_GONE_CODES.has(msg.payload.code)) {
+          rebinding = false;
+          leaveSessionState("That session has ended, or you're no longer in it.");
+        } else {
+          state.error = msg.payload.message;
+        }
         break;
       case "YOU_WERE_REMOVED":
-        state.players = [];
-        state.sessionId = null;
-        state.playerId = null;
-        state.playerToken = null;
-        state.turnState = null;
-        sessionStorage.removeItem("playerToken");
-        sessionStorage.removeItem("roomCode");
+        leaveSessionState("The DM removed you from the session.");
         break;
       case "HEARTBEAT":
         break;
     }
   }
 
+  /** On every (re)connect, tell the server who this tab is before anything else is sent. */
+  function rebind() {
+    const creds = loadCredentials();
+    if (!creds) return;
+    rebinding = true;
+    if (creds.role === "dm") {
+      wsClient.send({
+        type: "RECOVER_SESSION",
+        payload: { roomCode: creds.roomCode, dmToken: creds.dmToken },
+      });
+    } else {
+      wsClient.send({
+        type: "RECONNECT_SESSION",
+        payload: { roomCode: creds.roomCode, playerToken: creds.playerToken },
+      });
+    }
+  }
+
   wsClient.onMessage(handleMessage);
+  wsClient.onOpen(rebind);
   wsClient.onStatusChange((s) => {
     state.connectionStatus = s;
   });
+
+  // Phones drop sockets when the screen locks; reconnect as soon as the page is back.
+  const resume = () => {
+    if (document.visibilityState === "visible" && loadCredentials()) wsClient.connect();
+  };
+  document.addEventListener("visibilitychange", resume);
+  window.addEventListener("online", resume);
+
+  if (loadCredentials()) wsClient.connect();
+
+  function dmCommand<T extends DmCommand["type"]>(type: T, payload: DmCommandPayload<T>) {
+    if (!state.dmToken) return;
+    wsClient.send({ type, payload: { ...payload, dmToken: state.dmToken } } as ClientMessage);
+  }
 
   return {
     get state() {
       return state;
     },
     createSession: () => {
-      wsClient.connect("", undefined, true);
       wsClient.send({ type: "CREATE_SESSION", payload: {} });
     },
     joinSession: (roomCode: string, characterName: string, initiative: number) => {
-      sessionStorage.setItem("roomCode", roomCode.toUpperCase());
-      wsClient.connect(roomCode.toUpperCase());
       wsClient.send({
         type: "JOIN_SESSION",
-        payload: { roomCode: roomCode.toUpperCase(), characterName, initiative },
+        payload: { roomCode: roomCode.trim().toUpperCase(), characterName, initiative },
       });
     },
-    reconnectSession: (roomCode: string, playerToken: string) => {
-      wsClient.connect(roomCode, playerToken);
-    },
-    recoverSession: (roomCode: string, dmToken: string) => {
-      wsClient.connect(roomCode, dmToken, true);
-    },
-    updateInitiative: (dmToken: string, playerId: string, initiative: number) => {
-      wsClient.send({ type: "UPDATE_INITIATIVE", payload: { dmToken, playerId, initiative } });
-    },
-    reorderPlayers: (dmToken: string, orderedPlayerIds: string[]) => {
-      wsClient.send({ type: "REORDER_PLAYERS", payload: { dmToken, orderedPlayerIds } });
-    },
-    removePlayer: (dmToken: string, playerId: string) => {
-      wsClient.send({ type: "REMOVE_PLAYER", payload: { dmToken, playerId } });
-    },
-    advanceTurn: (dmToken: string) => {
-      wsClient.send({ type: "ADVANCE_TURN", payload: { dmToken } });
-    },
-    previousTurn: (dmToken: string) => {
-      wsClient.send({ type: "PREVIOUS_TURN", payload: { dmToken } });
-    },
-    resetSession: (dmToken: string) => {
-      wsClient.send({ type: "RESET_SESSION", payload: { dmToken } });
-    },
-    addNpc: (dmToken: string, name: string, initiative: number) => {
-      wsClient.send({ type: "ADD_NPC", payload: { dmToken, name, initiative } });
-    },
+    updateInitiative: (playerId: string, initiative: number) =>
+      dmCommand("UPDATE_INITIATIVE", { playerId, initiative }),
+    reorderPlayers: (orderedPlayerIds: string[]) =>
+      dmCommand("REORDER_PLAYERS", { orderedPlayerIds }),
+    removePlayer: (playerId: string) => dmCommand("REMOVE_PLAYER", { playerId }),
+    advanceTurn: () => dmCommand("ADVANCE_TURN", {}),
+    previousTurn: () => dmCommand("PREVIOUS_TURN", {}),
+    resetSession: () => dmCommand("RESET_SESSION", {}),
+    addNpc: (name: string, initiative: number) => dmCommand("ADD_NPC", { name, initiative }),
     clearError: () => {
       state.error = null;
-    },
-    disconnect: () => {
-      wsClient.disconnect();
-      sessionStorage.removeItem("dmToken");
-      sessionStorage.removeItem("playerToken");
-      sessionStorage.removeItem("roomCode");
     },
   };
 }

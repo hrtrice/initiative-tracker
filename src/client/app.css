@@ -256,7 +256,7 @@ label {
   font-weight: 500;
 }
 
-.player-row .dm-badge {
+.player-row .badge {
   font-size: 0.625rem;
   font-weight: 700;
   text-transform: uppercase;
@@ -287,6 +287,13 @@ label {
 .turn-indicator .round-info {
   font-size: 0.875rem;
   color: var(--color-text-muted);
+  margin-top: 0.25rem;
+}
+
+.turn-indicator .turn-note {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text);
   margin-top: 0.25rem;
 }
 

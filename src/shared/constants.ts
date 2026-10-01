@@ -8,6 +8,8 @@ export const MIN_NAME_LENGTH = 1;
 export const MAX_NAME_LENGTH = 50;
 export const WS_HEARTBEAT_INTERVAL_MS = 30_000;
 export const WS_CLOSE_TIMEOUT_MS = 5_000;
+/** Close code the server uses when the DM removes a player; clients must not auto-reconnect. */
+export const WS_CLOSE_REMOVED = 4001;
 
 export enum ErrorCode {
   SESSION_NOT_FOUND = "SESSION_NOT_FOUND",
@@ -20,6 +22,7 @@ export enum ErrorCode {
   INVALID_NAME = "INVALID_NAME",
   SESSION_EXPIRED = "SESSION_EXPIRED",
   UNKNOWN_ERROR = "UNKNOWN_ERROR",
+  INVALID_REORDER = "INVALID_REORDER",
 }
 
 export type SessionStatus = "WAITING" | "ACTIVE" | "COMPLETED";

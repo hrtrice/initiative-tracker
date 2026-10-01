@@ -5,3 +5,7 @@ dist/
 
 # Agent worktrees
 .opencode/worktrees/
+
+# Playwright output
+test-results/
+playwright-report/

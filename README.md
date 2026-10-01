@@ -11,7 +11,8 @@ npm ci
 npm run dev      # Vite on :5173 + server on :3000
 npm run check    # tsc + svelte-check
 npm test         # unit tests
-npm run build    # client to dist/, server to dist/server/index.cjs
+npm run test:e2e # build, then browser tests (Playwright) against the production server
+npm run build    # client to dist/client/, server to dist/server/index.cjs
 npm start        # serve the production build on $PORT (default 3000)
 ```
 

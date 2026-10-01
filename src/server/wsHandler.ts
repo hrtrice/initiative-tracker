@@ -16,8 +16,6 @@ import {
 } from "../shared/constants";
 import type { Player } from "../shared/types";
 
-const GEN_ERROR = "UNKNOWN_ERROR" as ErrorCode;
-
 export interface WsClient {
   ws: WebSocket;
   id: string;
@@ -65,7 +63,7 @@ export class WsHandler {
     } catch {
       this.sendToClient(client.id, {
         type: "ERROR",
-        payload: { code: GEN_ERROR, message: "Invalid JSON" },
+        payload: { code: ErrorCode.UNKNOWN_ERROR, message: "Invalid JSON" },
       });
       return;
     }
@@ -99,7 +97,7 @@ export class WsHandler {
         default:
           this.sendToClient(client.id, {
             type: "ERROR",
-            payload: { code: GEN_ERROR, message: "Unknown message type" },
+            payload: { code: ErrorCode.UNKNOWN_ERROR, message: "Unknown message type" },
           });
       }
     } catch (err) {
@@ -107,7 +105,7 @@ export class WsHandler {
         err instanceof Error &&
         Object.values(ErrorCode).includes(err.message as ErrorCode)
           ? (err.message as ErrorCode)
-          : GEN_ERROR;
+          : ErrorCode.UNKNOWN_ERROR;
       this.sendToClient(client.id, {
         type: "ERROR",
         payload: {
@@ -146,7 +144,7 @@ export class WsHandler {
     if (!roomCode || typeof roomCode !== "string") {
       this.sendToClient(client.id, {
         type: "ERROR",
-        payload: { code: GEN_ERROR, message: "Missing roomCode" },
+        payload: { code: ErrorCode.UNKNOWN_ERROR, message: "Missing roomCode" },
       });
       return;
     }
@@ -200,7 +198,7 @@ export class WsHandler {
         err instanceof Error &&
         Object.values(ErrorCode).includes(err.message as ErrorCode)
           ? (err.message as ErrorCode)
-          : GEN_ERROR;
+          : ErrorCode.UNKNOWN_ERROR;
       this.sendToClient(client.id, {
         type: "ERROR",
         payload: {

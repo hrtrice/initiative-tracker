@@ -1,0 +1,31 @@
+/*
+ * Adventurer's Tome: light parchment, ink, wax-seal red. Not wired into the app yet.
+ * Same tokens as src/client/app.css; all text pairings checked against WCAG AA.
+ * Mockup: design/themes/mockups.html?theme=tome
+ * Fonts in the mockup: "IM Fell English SC" (headings, names), "EB Garamond" (body).
+ */
+[data-theme="tome"] {
+  --color-bg: #ecdcb8;
+  --bg-image: radial-gradient(140% 90% at 50% 40%, transparent 55%, rgba(110, 70, 30, 0.35));
+  --color-card: #f3e7c9;
+  --color-surface: #f6ecd3;
+  --color-border: #b89a72;
+  --color-text: #2b1d12;
+  --color-text-muted: #6b5843;
+  --color-accent: #e2d0a8;
+  --color-accent-hover: #d8c296;
+  --color-highlight: #7d1a17;
+  --color-highlight-hover: #962420;
+  --color-on-highlight: #f3e6c8;
+  --color-error: #8f1d1d;
+  --color-error-hover: #a52a24;
+  --color-on-error: #f7ece0;
+  --color-error-text: #8f1d1d;
+  --color-success: #3f6b2a;
+  --color-warning: #94521a;
+  --color-on-warning: #fff6e6;
+  --color-current-turn: #ead2c0;
+  --shadow-current-turn: 0 0 0 1px rgba(125, 26, 23, 0.45);
+  --color-pc: #5b3b22;
+  --color-npc: #7d1a17;
+}

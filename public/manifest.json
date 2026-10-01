@@ -4,8 +4,8 @@
   "description": "Real-time D&D initiative tracker for tabletop combat",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#1a1a2e",
-  "theme_color": "#1a1a2e",
+  "background_color": "#15110e",
+  "theme_color": "#15110e",
   "icons": [
     {
       "src": "/icon-192.png",

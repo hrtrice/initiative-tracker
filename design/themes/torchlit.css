@@ -1,0 +1,30 @@
+/* Torchlit Dungeon (live default). Mirrors the :root colour tokens in src/client/app.css. */
+[data-theme="torchlit"] {
+  --color-bg: #15110e;
+  --bg-image: radial-gradient(120% 60% at 50% 0%, rgba(224, 140, 60, 0.12), transparent 60%);
+  --color-card: #221c17;
+  --color-surface: #29221c;
+  --color-border: #46382a;
+  --color-text: #efe3c8;
+  --color-text-muted: #a8987a;
+  /* Secondary buttons and badges */
+  --color-accent: #3a2e22;
+  --color-accent-hover: #4a3b2b;
+  /* Primary actions, focus, the current turn */
+  --color-highlight: #e0a84a;
+  --color-highlight-hover: #f3c46b;
+  --color-on-highlight: #1b130b;
+  --color-error: #a3342b;
+  --color-error-hover: #b9443a;
+  --color-on-error: #f7e9e4;
+  /* Error text on dark backgrounds (the button crimson is too dark to read) */
+  --color-error-text: #e0675c;
+  --color-success: #7fa65a;
+  --color-warning: #d9822b;
+  --color-on-warning: #1b130b;
+  --color-current-turn: #33281b;
+  --shadow-current-turn: 0 0 0 1px rgba(224, 168, 74, 0.5), 0 0 22px rgba(232, 140, 50, 0.4);
+  /* Row edges: players vs NPCs */
+  --color-pc: #b08a46;
+  --color-npc: #d0503f;
+}

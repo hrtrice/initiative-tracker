@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- d20 on the app background; artwork stays inside the maskable safe zone. -->
+  <rect width="512" height="512" fill="#1a1a2e"/>
+  <g fill="none" stroke="#e94560" stroke-width="16" stroke-linejoin="round" stroke-linecap="round">
+    <polygon points="256,106 386,181 386,331 256,406 126,331 126,181" fill="#16213e"/>
+    <polygon points="256,166 336,306 176,306"/>
+    <path d="M256 106 L256 166 M386 181 L336 306 M126 181 L176 306 M386 331 L336 306 M126 331 L176 306 M256 406 L336 306 M256 406 L176 306 M386 181 L256 166 M126 181 L256 166"/>
+  </g>
+  <text x="256" y="276" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-weight="700" font-size="62" fill="#eeeeee">20</text>
+</svg>

@@ -14,7 +14,8 @@ const wss = new WebSocketServer({ server });
 const store = new SessionStore();
 const wsHandler = new WsHandler(store);
 
-app.use(express.static("dist"));
+// Only the client build is public; the server bundle lives next to it in dist/server.
+app.use(express.static("dist/client"));
 
 app.get("/health", (_req, res) => {
   res.json({

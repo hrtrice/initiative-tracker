@@ -303,6 +303,16 @@ label {
   padding: 0 0.375rem;
 }
 
+.npc-icon {
+  color: var(--color-highlight);
+  flex-shrink: 0;
+}
+
+.field-chip.empty {
+  border-style: dashed;
+  opacity: 0.7;
+}
+
 .field-editor-item {
   list-style: none;
 }

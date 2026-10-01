@@ -1,3 +1,4 @@
+import type { Page } from "@playwright/test";
 import {
   expect,
   test,
@@ -17,8 +18,12 @@ test("the order sorts by initiative and Next loops back to the top", async ({ ne
   await addNpc(dm, "Goblin", 20);
   await expectRows(dm, ["20 Goblin", "15 Aragorn"]);
   await expectRows(player, ["20 Goblin", "15 Aragorn"]);
-  await expect(dm.locator(".player-row .badge", { hasText: "NPC" })).toBeVisible();
-  await expect(player.locator(".player-row .badge", { hasText: "NPC" })).toHaveCount(0);
+  // NPCs are marked with a monster icon for everyone.
+  const npcIcon = (page: Page, name: string) =>
+    page.locator(".player-row", { hasText: name }).getByRole("img", { name: "NPC" });
+  await expect(npcIcon(dm, "Goblin")).toBeVisible();
+  await expect(npcIcon(player, "Goblin")).toBeVisible();
+  await expect(npcIcon(player, "Aragorn")).toHaveCount(0);
   await expect(player.locator(".dm-toolbar")).toHaveCount(0);
 
   await expect(turnBanner(dm)).toContainText("NPC turn: you're up");

@@ -2,6 +2,7 @@
   import { MIN_INITIATIVE, MAX_INITIATIVE } from "../lib/types";
   import type { CustomField, FieldValue, PlayerView } from "../lib/types";
   import FieldEditor from "./FieldEditor.svelte";
+  import NpcIcon from "./NpcIcon.svelte";
 
   let {
     players = [],
@@ -29,6 +30,10 @@
   let editingFieldsOf = $state<string | null>(null);
   const canEditFields = (player: PlayerView) =>
     customFields.length > 0 && (isDM || player.id === myPlayerId);
+  /** Every field shows on every row, empty ones as "—". NPC values are secret, so
+   *  players see no fields at all on NPC rows rather than misleading blanks. */
+  const showsFields = (player: PlayerView) =>
+    customFields.length > 0 && (isDM || !player.isNpc);
 
   /** The row whose initiative the DM is editing, and the draft value. */
   let editingId = $state<string | null>(null);
@@ -99,8 +104,8 @@
         </span>
         <span class="name">
           {player.name}
-          {#if isDM && player.isNpc}
-            <span class="badge">NPC</span>
+          {#if player.isNpc}
+            <NpcIcon />
           {/if}
           {#if player.id === myPlayerId}
             <span class="badge">You</span>
@@ -135,11 +140,13 @@
             >&#10005;</button>
           </div>
         {/if}
-        {#if customFields.some((f) => f.id in player.fields)}
+        {#if showsFields(player)}
           <span class="field-chips">
-          {#each customFields.filter((f) => f.id in player.fields) as field (field.id)}
-            <span class="field-chip">{field.name} {player.fields[field.id]}</span>
-          {/each}
+            {#each customFields as field (field.id)}
+              <span class="field-chip" class:empty={!(field.id in player.fields)}>
+                {field.name} {player.fields[field.id] ?? "—"}
+              </span>
+            {/each}
           </span>
         {/if}
       </li>

@@ -61,16 +61,16 @@ Order: **Phase 0**, then **Phases 1 and 2 in parallel**, then **Phase 3**. Phase
   - Add a CI workflow for PRs: `check`, `test`, `build`.
   - The 3 failing turn tests were written before the DM skipped its turn. They've been rewritten to check *who* holds the turn, including looping from the last player back to the top.
   - **Done when:** `npm run build` and `docker build .` exit 0, and CI runs on PRs.
-- [x] **T2. Restore a deploy target** (#2, #23). Railway (paid account). `ci.yml` deploys with `railway up` after CI passes on `main`. The one-time setup is in the README.
-  - **Done when:** pushing to `main` deploys, `/health` returns 200, and the host is set so it doesn't auto-stop an idle machine mid-session.
+- [x] **T2. Restore a deploy target** (#2, #23). Railway (paid account). `ci.yml` deploys with `railway up` after CI passes on `master`. The one-time setup is in the README.
+  - **Done when:** pushing to `master` deploys, `/health` returns 200, and the host is set so it doesn't auto-stop an idle machine mid-session.
 
 ### Phase 1: Session lifecycle (client and protocol)
-- [ ] **T3. Make joining work end to end** (#3, #4, #12)
+- [x] **T3. Make joining work end to end** (#3, #4, #12)
   - Call `preventDefault()` in `PlayerEntry`.
   - Add `sessionId` and `roomCode` to `JOIN_ACCEPTED` and set them in `useSession`.
   - Make `wsClient.connect()` reuse the open socket, or detach the old socket's handlers before closing it.
   - **Done when:** a player who joins sees the session view, and the DM sees the player within 500 ms.
-- [ ] **T4. Rebind sessions on every (re)connect** (#5, #6, #10, #11)
+- [x] **T4. Rebind sessions on every (re)connect** (#5, #6, #10, #11)
   - On every socket `open`, send `RECOVER_SESSION` or `RECONNECT_SESSION` if tokens are stored, and drop the query-string tokens.
   - `SESSION_STATE_SYNC` should carry and set `sessionId`, `roomCode` and `isDM`.
   - In `disconnectClient`, only clear `clientId` if it still matches the closing socket.
@@ -79,7 +79,7 @@ Order: **Phase 0**, then **Phases 1 and 2 in parallel**, then **Phase 3**. Phase
   - **Done when:** a DM refresh restores admin view, a player refresh restores player view, a dropped socket resumes receiving broadcasts, and a removed player lands in the lobby with no retry loop.
 
 ### Phase 2: Initiative and turn logic (server)
-- [ ] **T5. Sort automatically and track turns by player ID** (#7, #8, #13)
+- [x] **T5. Sort automatically and track turns by player ID** (#7, #8, #13)
   - **Decided:** take the DM out of `session.players` entirely (keep only `dmPlayerId`). That removes all the DM-skipping logic and the reorder length mismatch. NPCs stay in the list and take turns like players, and the DM controls them: the DM view marks NPC rows, and when an NPC's turn comes up the DM's view makes clear it's theirs to run.
   - **Decided:** Next after the last entry loops back to the top of the initiative order and increments the round.
   - Sort by initiative (descending), breaking ties by join time, on join, NPC add and initiative update.
@@ -87,10 +87,18 @@ Order: **Phase 0**, then **Phases 1 and 2 in parallel**, then **Phase 3**. Phase
   - `reorderPlayers` should validate against the player IDs and return `INVALID_REORDER`.
   - Update the unit tests to match.
   - **Done when:** the list is always sorted unless the DM has manually reordered, reorder works, the turn stays on the same player across sorts and removals, Next loops from the last entry to the top, and all unit tests pass.
-- [ ] **T6. Fix the `ADD_NPC` broadcast** (#9)
+- [x] **T6. Fix the `ADD_NPC` broadcast** (#9)
   - Broadcast a normal list update with no `dmPlayerId`.
   - Never set `isDM` from a broadcast, only from `SESSION_CREATED` or a `RECOVER_SESSION` reply.
   - **Done when:** players never see the DM toolbar.
+
+**Phases 1-2 notes:**
+- Broadcasts now carry only `{id, name, initiative, isNpc}`. Before this, every client received every player's token, *including the DM's token*, because the DM was a player entry.
+- Before combat starts (`WAITING`), the turn always follows the top of the order. The first **Next** starts combat.
+- When the current player is removed, the turn passes to the next entry. If they were last, it wraps to the top and the round goes up.
+- New joins are inserted by initiative, so a manual DM reorder of everyone else is kept.
+- Verified with a 28-check browser run against the production build: join, NPC sorting, turn loop, reorder, DM and player refresh, a socket cut through a TCP proxy, removal, server restart, and retrying a failed join.
+- The Playwright specs in `tests/e2e/` still target the old behavior and aren't in CI. T8 rewrites them.
 
 ### Phase 3: Spec features that are missing
 - [ ] **T7. Finish the DM and player controls** (#14, #15, #22)

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { SessionStore } from "../../../src/server/sessionStore";
 import { ErrorCode, MAX_PLAYERS, MIN_NAME_LENGTH, MAX_NAME_LENGTH } from "../../../src/shared/constants";
-import type { Player } from "../../../src/shared/types";
+import type { Player, Session } from "../../../src/shared/types";
 
 function createTestPlayer(overrides: Partial<Player> = {}): Player {
   return {
@@ -15,6 +15,10 @@ function createTestPlayer(overrides: Partial<Player> = {}): Player {
     playerToken: overrides.playerToken ?? "token-1",
     createdAt: overrides.createdAt ?? Date.now(),
   };
+}
+
+function currentPlayerId(session: Session): string | undefined {
+  return session.players[session.turnState.currentIndex]?.id;
 }
 
 describe("SessionStore", () => {
@@ -229,17 +233,28 @@ describe("SessionStore", () => {
     it("advances to next player", () => {
       const session = store.create("t1", "p1");
       store.addPlayer(session, createTestPlayer({ id: "p2", name: "Aragorn" }));
+      store.addPlayer(session, createTestPlayer({ id: "p3", name: "Legolas" }));
+      expect(currentPlayerId(session)).toBe("p2");
       store.advanceTurn(session);
-      expect(session.turnState.currentIndex).toBe(1);
+      expect(currentPlayerId(session)).toBe("p3");
       expect(session.turnState.round).toBe(1);
     });
 
-    it("wraps forward and increments round", () => {
+    it("loops from the last player back to the top and increments round", () => {
+      const session = store.create("t1", "p1");
+      store.addPlayer(session, createTestPlayer({ id: "p2", name: "Aragorn" }));
+      store.addPlayer(session, createTestPlayer({ id: "p3", name: "Legolas" }));
+      store.advanceTurn(session);
+      store.advanceTurn(session);
+      expect(currentPlayerId(session)).toBe("p2");
+      expect(session.turnState.round).toBe(2);
+    });
+
+    it("never gives the turn to the DM", () => {
       const session = store.create("t1", "p1");
       store.addPlayer(session, createTestPlayer({ id: "p2", name: "Aragorn" }));
       store.advanceTurn(session);
-      store.advanceTurn(session);
-      expect(session.turnState.currentIndex).toBe(0);
+      expect(currentPlayerId(session)).toBe("p2");
       expect(session.turnState.round).toBe(2);
     });
 
@@ -257,17 +272,19 @@ describe("SessionStore", () => {
     it("moves to previous player", () => {
       const session = store.create("t1", "p1");
       store.addPlayer(session, createTestPlayer({ id: "p2", name: "Aragorn" }));
+      store.addPlayer(session, createTestPlayer({ id: "p3", name: "Legolas" }));
       store.advanceTurn(session);
       store.previousTurn(session);
-      expect(session.turnState.currentIndex).toBe(0);
+      expect(currentPlayerId(session)).toBe("p2");
       expect(session.turnState.round).toBe(1);
     });
 
-    it("wraps backward and floors round at 1", () => {
+    it("wraps backward to the last player and floors round at 1", () => {
       const session = store.create("t1", "p1");
       store.addPlayer(session, createTestPlayer({ id: "p2", name: "Aragorn" }));
+      store.addPlayer(session, createTestPlayer({ id: "p3", name: "Legolas" }));
       store.previousTurn(session);
-      expect(session.turnState.currentIndex).toBe(1);
+      expect(currentPlayerId(session)).toBe("p3");
       expect(session.turnState.round).toBe(1);
     });
 

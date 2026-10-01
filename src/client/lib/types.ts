@@ -1,8 +1,26 @@
-import type { Session, Player, PlayerView, TurnState } from "@shared/types";
+import type {
+  CustomField,
+  CustomFieldType,
+  FieldValue,
+  Player,
+  PlayerView,
+  Session,
+  TurnState,
+} from "@shared/types";
 import type { ClientMessage, ServerMessage } from "@shared/messages";
 import type { ConnectionStatus } from "./wsClient";
 
-export type { Session, Player, PlayerView, TurnState, ClientMessage, ServerMessage };
+export type {
+  CustomField,
+  CustomFieldType,
+  FieldValue,
+  Session,
+  Player,
+  PlayerView,
+  TurnState,
+  ClientMessage,
+  ServerMessage,
+};
 export * from "@shared/constants";
 
 export interface SessionState {
@@ -10,6 +28,7 @@ export interface SessionState {
   roomCode: string | null;
   players: PlayerView[];
   turnState: TurnState | null;
+  customFields: CustomField[];
   isDM: boolean;
   playerId: string | null;
   playerToken: string | null;

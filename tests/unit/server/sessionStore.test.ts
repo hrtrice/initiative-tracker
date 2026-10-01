@@ -12,6 +12,7 @@ function makePlayer(overrides: Partial<Player> = {}): Player {
     name: overrides.name ?? `Player${nextId}`,
     initiative: overrides.initiative ?? 10,
     isNpc: overrides.isNpc ?? false,
+    fields: overrides.fields ?? {},
     clientId: overrides.clientId ?? null,
     playerToken: overrides.playerToken ?? `token-${nextId}`,
     createdAt: overrides.createdAt ?? Date.now(),
@@ -383,15 +384,134 @@ describe("SessionStore", () => {
     it("never exposes tokens or connection ids", () => {
       seed(["Aragorn", 15]);
       store.bindClient("c-1", session, session.players[0]!.id);
-      const json = JSON.stringify(snapshot(session));
+      const json = JSON.stringify(snapshot(session, true));
       expect(json).not.toContain("token");
       expect(json).not.toContain("c-1");
-      expect(snapshot(session).players[0]).toEqual({
+      expect(snapshot(session, true).players[0]).toEqual({
         id: session.players[0]!.id,
         name: "Aragorn",
         initiative: 15,
         isNpc: false,
+        fields: {},
       });
+    });
+  });
+  describe("custom fields", () => {
+    const fieldNamed = (name: string) => session.customFields.find((f) => f.name === name)!;
+    const valueOf = (playerName: string, fieldName: string) =>
+      session.players.find((p) => p.name === playerName)!.fields[fieldNamed(fieldName).id];
+
+    it("adds fields with a name and type", () => {
+      store.addField(session, "  AC  ", "number");
+      store.addField(session, "Notes", "text");
+      expect(session.customFields.map((f) => [f.name, f.type])).toEqual([
+        ["AC", "number"],
+        ["Notes", "text"],
+      ]);
+    });
+
+    it("rejects bad names, duplicates (case-insensitive), bad types and too many fields", () => {
+      expectCode(() => store.addField(session, "  ", "number"), ErrorCode.INVALID_FIELD);
+      expectCode(() => store.addField(session, "x".repeat(21), "number"), ErrorCode.INVALID_FIELD);
+      expectCode(() => store.addField(session, "AC", "dice"), ErrorCode.INVALID_FIELD);
+      store.addField(session, "AC", "number");
+      expectCode(() => store.addField(session, "ac", "text"), ErrorCode.INVALID_FIELD);
+      for (let i = 1; i < 8; i++) store.addField(session, `F${i}`, "text");
+      expectCode(() => store.addField(session, "Ninth", "text"), ErrorCode.INVALID_FIELD);
+    });
+
+    it("sets, validates and clears values", () => {
+      seed(["Aragorn", 15]);
+      const aragorn = session.players[0]!;
+      const ac = store.addField(session, "AC", "number");
+      const notes = store.addField(session, "Notes", "text");
+
+      store.setFieldValue(session, aragorn.id, ac.id, "16");
+      store.setFieldValue(session, aragorn.id, notes.id, "  ranger  ");
+      expect(aragorn.fields).toEqual({ [ac.id]: 16, [notes.id]: "ranger" });
+
+      expectCode(() => store.setFieldValue(session, aragorn.id, ac.id, 2.5), ErrorCode.INVALID_FIELD);
+      expectCode(() => store.setFieldValue(session, aragorn.id, ac.id, 1000), ErrorCode.INVALID_FIELD);
+      expectCode(() => store.setFieldValue(session, aragorn.id, ac.id, "abc"), ErrorCode.INVALID_FIELD);
+      expectCode(
+        () => store.setFieldValue(session, aragorn.id, notes.id, "x".repeat(41)),
+        ErrorCode.INVALID_FIELD
+      );
+      expectCode(() => store.setFieldValue(session, aragorn.id, "nope", 1), ErrorCode.FIELD_NOT_FOUND);
+      expectCode(() => store.setFieldValue(session, "nope", ac.id, 1), ErrorCode.PLAYER_NOT_FOUND);
+      expect(aragorn.fields[ac.id]).toBe(16);
+
+      store.setFieldValue(session, aragorn.id, ac.id, null);
+      store.setFieldValue(session, aragorn.id, notes.id, "");
+      expect(aragorn.fields).toEqual({});
+    });
+
+    it("renames fields, keeping values; rejects renaming onto another field", () => {
+      seed(["Aragorn", 15]);
+      store.addField(session, "AC", "number");
+      store.addField(session, "PP", "number");
+      store.setFieldValue(session, session.players[0]!.id, fieldNamed("AC").id, 16);
+      store.updateField(session, fieldNamed("AC").id, { name: "Armor Class" });
+      expect(valueOf("Aragorn", "Armor Class")).toBe(16);
+      store.updateField(session, fieldNamed("PP").id, { name: "pp" }); // case change of itself is fine
+      expectCode(
+        () => store.updateField(session, fieldNamed("pp").id, { name: "armor class" }),
+        ErrorCode.INVALID_FIELD
+      );
+    });
+
+    it("changing type keeps values that fit and drops ones that don't", () => {
+      seed(["Aragorn", 15], ["Gimli", 8]);
+      const f = store.addField(session, "Speed", "text");
+      store.setFieldValue(session, session.players[0]!.id, f.id, "30");
+      store.setFieldValue(session, session.players[1]!.id, f.id, "fast");
+      store.updateField(session, f.id, { type: "number" });
+      expect(valueOf("Aragorn", "Speed")).toBe(30);
+      expect(session.players[1]!.fields).toEqual({});
+      store.updateField(session, f.id, { type: "text" });
+      expect(valueOf("Aragorn", "Speed")).toBe("30");
+    });
+
+    it("deleting a field removes everyone's value for it", () => {
+      seed(["Aragorn", 15]);
+      const ac = store.addField(session, "AC", "number");
+      store.setFieldValue(session, session.players[0]!.id, ac.id, 16);
+      store.removeField(session, ac.id);
+      expect(session.customFields).toEqual([]);
+      expect(session.players[0]!.fields).toEqual({});
+      expectCode(() => store.removeField(session, ac.id), ErrorCode.FIELD_NOT_FOUND);
+    });
+
+    it("fields and players' values survive a new combat", () => {
+      seed(["Aragorn", 15]);
+      const ac = store.addField(session, "AC", "number");
+      store.setFieldValue(session, session.players[0]!.id, ac.id, 16);
+      store.reset(session);
+      expect(session.customFields.map((f) => f.name)).toEqual(["AC"]);
+      expect(session.players[0]!.fields[ac.id]).toBe(16);
+    });
+
+    it("are per room: other sessions are unaffected", () => {
+      const other = store.create("t2");
+      store.addField(session, "AC", "number");
+      expect(other.customFields).toEqual([]);
+      store.addField(other, "AC", "text"); // same name is fine in another room
+      expect(session.customFields[0]!.type).toBe("number");
+    });
+
+    it("snapshots hide NPC values from players but not from the DM", () => {
+      seed(["Aragorn", 15]);
+      const goblin = store.addNpc(session, "Goblin", 12);
+      const ac = store.addField(session, "AC", "number");
+      store.setFieldValue(session, session.players[0]!.id, ac.id, 16);
+      store.setFieldValue(session, goblin.id, ac.id, 13);
+
+      const asPlayer = snapshot(session, false).players;
+      const asDm = snapshot(session, true).players;
+      expect(asPlayer.find((p) => p.name === "Aragorn")!.fields).toEqual({ [ac.id]: 16 });
+      expect(asPlayer.find((p) => p.name === "Goblin")!.fields).toEqual({});
+      expect(asDm.find((p) => p.name === "Goblin")!.fields).toEqual({ [ac.id]: 13 });
+      expect(snapshot(session, false).customFields).toEqual([{ id: ac.id, name: "AC", type: "number" }]);
     });
   });
 });

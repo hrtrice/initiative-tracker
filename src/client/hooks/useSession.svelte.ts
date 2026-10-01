@@ -1,6 +1,6 @@
 import { WsClient } from "../lib/wsClient";
 import type { ConnectionStatus } from "../lib/wsClient";
-import type { SessionState } from "../lib/types";
+import type { CustomFieldType, FieldValue, SessionState } from "../lib/types";
 import type { ClientMessage, ServerMessage } from "@shared/messages";
 import { ErrorCode } from "@shared/constants";
 
@@ -73,6 +73,7 @@ export function createSessionState() {
     roomCode: null,
     players: [],
     turnState: null,
+    customFields: [],
     isDM: false,
     playerId: null,
     playerToken: null,
@@ -92,6 +93,7 @@ export function createSessionState() {
     state.roomCode = null;
     state.players = [];
     state.turnState = null;
+    state.customFields = [];
     state.isDM = false;
     state.playerId = null;
     state.playerToken = null;
@@ -110,6 +112,7 @@ export function createSessionState() {
         state.isDM = true;
         state.players = msg.payload.players;
         state.turnState = msg.payload.turnState;
+        state.customFields = msg.payload.customFields;
         state.error = null;
         saveCredentials({ role: "dm", roomCode: msg.payload.roomCode, dmToken: msg.payload.dmToken });
         break;
@@ -122,6 +125,7 @@ export function createSessionState() {
         state.isDM = false;
         state.players = msg.payload.players;
         state.turnState = msg.payload.turnState;
+        state.customFields = msg.payload.customFields;
         state.error = null;
         saveCredentials({
           role: "player",
@@ -141,6 +145,7 @@ export function createSessionState() {
         state.playerToken = creds?.role === "player" ? creds.playerToken : null;
         state.players = msg.payload.players;
         state.turnState = msg.payload.turnState;
+        state.customFields = msg.payload.customFields;
         break;
       }
       case "PLAYER_JOINED":
@@ -150,8 +155,10 @@ export function createSessionState() {
       case "TURN_ADVANCED":
       case "TURN_REGRESSED":
       case "SESSION_RESET":
+      case "FIELDS_UPDATED":
         state.players = msg.payload.players;
         state.turnState = msg.payload.turnState;
+        state.customFields = msg.payload.customFields;
         break;
       case "ERROR":
         if (rebinding && SESSION_GONE_CODES.has(msg.payload.code)) {
@@ -232,6 +239,17 @@ export function createSessionState() {
     previousTurn: () => dmCommand("PREVIOUS_TURN", {}),
     resetSession: () => dmCommand("RESET_SESSION", {}),
     addNpc: (name: string, initiative: number) => dmCommand("ADD_NPC", { name, initiative }),
+    addField: (name: string, type: CustomFieldType) => dmCommand("ADD_FIELD", { name, type }),
+    updateField: (fieldId: string, changes: { name?: string; type?: CustomFieldType }) =>
+      dmCommand("UPDATE_FIELD", { fieldId, ...changes }),
+    removeField: (fieldId: string) => dmCommand("REMOVE_FIELD", { fieldId }),
+    /** DMs can set anyone's value; players only their own. null clears the value. */
+    setFieldValue: (playerId: string, fieldId: string, value: FieldValue | null) => {
+      if (state.isDM) dmCommand("SET_FIELD_VALUE", { playerId, fieldId, value });
+      else if (playerId === state.playerId) {
+        wsClient.send({ type: "SET_MY_FIELD", payload: { fieldId, value } });
+      }
+    },
     /** Rejoin as DM from another device or after clearing the browser, using the Admin Key. */
     recoverAsDm: (roomCode: string, dmToken: string) => {
       saveCredentials({ role: "dm", roomCode: roomCode.trim().toUpperCase(), dmToken: dmToken.trim() });

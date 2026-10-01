@@ -1,4 +1,4 @@
-import type { PlayerView, TurnState } from "./types";
+import type { CustomField, CustomFieldType, FieldValue, PlayerView, TurnState } from "./types";
 import { ErrorCode } from "./constants";
 
 // ---------------------------------------------------------------------------
@@ -64,6 +64,39 @@ export interface SubmitInitiativePayload {
 
 export interface LeaveSessionPayload {}
 
+export interface AddFieldPayload {
+  dmToken: string;
+  name: string;
+  type: CustomFieldType;
+}
+
+/** Rename and/or change type. Changing type keeps only values valid for the new type. */
+export interface UpdateFieldPayload {
+  dmToken: string;
+  fieldId: string;
+  name?: string;
+  type?: CustomFieldType;
+}
+
+export interface RemoveFieldPayload {
+  dmToken: string;
+  fieldId: string;
+}
+
+/** DM setting any player's or NPC's value. null clears it. */
+export interface SetFieldValuePayload {
+  dmToken: string;
+  playerId: string;
+  fieldId: string;
+  value: FieldValue | null;
+}
+
+/** A player setting a value on their own character. null clears it. */
+export interface SetMyFieldPayload {
+  fieldId: string;
+  value: FieldValue | null;
+}
+
 export interface ClientMessageMap {
   CREATE_SESSION: CreateSessionPayload;
   JOIN_SESSION: JoinSessionPayload;
@@ -78,6 +111,11 @@ export interface ClientMessageMap {
   ADD_NPC: AddNpcPayload;
   SUBMIT_INITIATIVE: SubmitInitiativePayload;
   LEAVE_SESSION: LeaveSessionPayload;
+  ADD_FIELD: AddFieldPayload;
+  UPDATE_FIELD: UpdateFieldPayload;
+  REMOVE_FIELD: RemoveFieldPayload;
+  SET_FIELD_VALUE: SetFieldValuePayload;
+  SET_MY_FIELD: SetMyFieldPayload;
 }
 
 export type ClientMessage = {
@@ -97,6 +135,7 @@ export interface SessionCreatedPayload {
   sessionId: string;
   players: PlayerView[];
   turnState: TurnState;
+  customFields: CustomField[];
 }
 
 export interface JoinAcceptedPayload {
@@ -106,6 +145,7 @@ export interface JoinAcceptedPayload {
   playerToken: string;
   players: PlayerView[];
   turnState: TurnState;
+  customFields: CustomField[];
 }
 
 /** Reply to RECONNECT_SESSION / RECOVER_SESSION: who you are plus the full state. */
@@ -114,6 +154,7 @@ export interface SessionStateSyncPayload {
   roomCode: string;
   players: PlayerView[];
   turnState: TurnState;
+  customFields: CustomField[];
   isDM: boolean;
   /** Your own player id; null for the DM. */
   playerId: string | null;
@@ -122,36 +163,50 @@ export interface SessionStateSyncPayload {
 export interface PlayerJoinedPayload {
   players: PlayerView[];
   turnState: TurnState;
+  customFields: CustomField[];
 }
 
 export interface InitiativeUpdatedPayload {
   players: PlayerView[];
   turnState: TurnState;
+  customFields: CustomField[];
 }
 
 export interface PlayersReorderedPayload {
   players: PlayerView[];
   turnState: TurnState;
+  customFields: CustomField[];
 }
 
 export interface PlayerRemovedPayload {
   players: PlayerView[];
   turnState: TurnState;
+  customFields: CustomField[];
 }
 
 export interface TurnAdvancedPayload {
   players: PlayerView[];
   turnState: TurnState;
+  customFields: CustomField[];
 }
 
 export interface TurnRegressedPayload {
   players: PlayerView[];
   turnState: TurnState;
+  customFields: CustomField[];
 }
 
 export interface SessionResetPayload {
   players: PlayerView[];
   turnState: TurnState;
+  customFields: CustomField[];
+}
+
+/** Field definitions or values changed. */
+export interface FieldsUpdatedPayload {
+  players: PlayerView[];
+  turnState: TurnState;
+  customFields: CustomField[];
 }
 
 export interface HeartbeatPayload {
@@ -178,6 +233,7 @@ export interface ServerMessageMap {
   TURN_ADVANCED: TurnAdvancedPayload;
   TURN_REGRESSED: TurnRegressedPayload;
   SESSION_RESET: SessionResetPayload;
+  FIELDS_UPDATED: FieldsUpdatedPayload;
   HEARTBEAT: HeartbeatPayload;
   ERROR: ErrorPayload;
   YOU_WERE_REMOVED: YouWereRemovedPayload;

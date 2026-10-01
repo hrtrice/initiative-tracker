@@ -1,6 +1,7 @@
 <script lang="ts">
   import { MIN_INITIATIVE, MAX_INITIATIVE } from "../lib/types";
-  import type { PlayerView } from "../lib/types";
+  import type { CustomField, FieldValue, PlayerView } from "../lib/types";
+  import FieldEditor from "./FieldEditor.svelte";
 
   let {
     players = [],
@@ -10,6 +11,8 @@
     onRemovePlayer,
     onReorderPlayers,
     onUpdateInitiative,
+    customFields = [],
+    onSetFieldValue,
   }: {
     players: PlayerView[];
     isDM?: boolean;
@@ -18,7 +21,14 @@
     onRemovePlayer?: (playerId: string) => void;
     onReorderPlayers?: (orderedPlayerIds: string[]) => void;
     onUpdateInitiative?: (playerId: string, initiative: number) => void;
+    customFields?: CustomField[];
+    onSetFieldValue?: (playerId: string, fieldId: string, value: FieldValue | null) => void;
   } = $props();
+
+  /** The row whose custom field editor is open. DMs can edit any row; players only their own. */
+  let editingFieldsOf = $state<string | null>(null);
+  const canEditFields = (player: PlayerView) =>
+    customFields.length > 0 && (isDM || player.id === myPlayerId);
 
   /** The row whose initiative the DM is editing, and the draft value. */
   let editingId = $state<string | null>(null);
@@ -96,6 +106,14 @@
             <span class="badge">You</span>
           {/if}
         </span>
+        {#if canEditFields(player)}
+          <button
+            class="btn-icon btn-ghost"
+            onclick={() => (editingFieldsOf = editingFieldsOf === player.id ? null : player.id)}
+            aria-expanded={editingFieldsOf === player.id}
+            aria-label="Edit fields for {player.name}"
+          >&#9998;</button>
+        {/if}
         {#if isDM}
           <div class="controls">
             <button
@@ -117,7 +135,24 @@
             >&#10005;</button>
           </div>
         {/if}
+        {#if customFields.some((f) => f.id in player.fields)}
+          <span class="field-chips">
+          {#each customFields.filter((f) => f.id in player.fields) as field (field.id)}
+            <span class="field-chip">{field.name} {player.fields[field.id]}</span>
+          {/each}
+          </span>
+        {/if}
       </li>
+      {#if editingFieldsOf === player.id && canEditFields(player)}
+        <li class="field-editor-item">
+          <FieldEditor
+            {player}
+            fields={customFields}
+            onchange={(fieldId, value) => onSetFieldValue?.(player.id, fieldId, value)}
+            onclose={() => (editingFieldsOf = null)}
+          />
+        </li>
+      {/if}
     {/each}
   </ul>
 {/if}

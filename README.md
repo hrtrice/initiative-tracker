@@ -17,7 +17,7 @@ npm start        # serve the production build on $PORT (default 3000)
 
 ## Deploying (Railway)
 
-`.github/workflows/ci.yml` runs check, tests, build and a Docker build on every PR and every push to `main`. On `main`, once CI passes, it deploys with the Railway CLI (`railway up`). Railway then builds the `Dockerfile` and runs the settings in `railway.json`, including the `/health` healthcheck.
+`.github/workflows/ci.yml` runs check, tests, build and a Docker build on every PR and every push to `master`. On `master`, once CI passes, it deploys with the Railway CLI (`railway up`). Railway then builds the `Dockerfile` and runs the settings in `railway.json`, including the `/health` healthcheck.
 
 One-time setup:
 

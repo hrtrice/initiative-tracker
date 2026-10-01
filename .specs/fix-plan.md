@@ -55,12 +55,13 @@ Confidence tags: **CONFIRMED** means it was reproduced or proven by reading the 
 Order: **Phase 0**, then **Phases 1 and 2 in parallel**, then **Phase 3**. Phase 4 can run anytime after Phase 0.
 
 ### Phase 0: Unblock build and deploy
-- [ ] **T1. Make `npm run build` green** (#1, #17, #20, #21)
-  - Add `UNKNOWN_ERROR` and `INVALID_REORDER` to `ErrorCode`, and remove the cast in `wsHandler.ts`.
+- [x] **T1. Make `npm run build` green** (#1, #17, #20, #21)
+  - Add `UNKNOWN_ERROR` to `ErrorCode`, and remove the cast in `wsHandler.ts`. `INVALID_REORDER` moves to T5, where it's first used.
   - Add `svelte-check` to `npm run check`. Remove the duplicate esbuild step from the Dockerfile. Delete the `test_ws*` files.
   - Add a CI workflow for PRs: `check`, `test`, `build`.
+  - The 3 failing turn tests were written before the DM skipped its turn. They've been rewritten to check *who* holds the turn, including looping from the last player back to the top.
   - **Done when:** `npm run build` and `docker build .` exit 0, and CI runs on PRs.
-- [ ] **T2. Restore a deploy target** (#2, #23). *Needs a decision on the host.*
+- [x] **T2. Restore a deploy target** (#2, #23). Railway (paid account). `ci.yml` deploys with `railway up` after CI passes on `main`. The one-time setup is in the README.
   - **Done when:** pushing to `main` deploys, `/health` returns 200, and the host is set so it doesn't auto-stop an idle machine mid-session.
 
 ### Phase 1: Session lifecycle (client and protocol)
@@ -78,24 +79,25 @@ Order: **Phase 0**, then **Phases 1 and 2 in parallel**, then **Phase 3**. Phase
   - **Done when:** a DM refresh restores admin view, a player refresh restores player view, a dropped socket resumes receiving broadcasts, and a removed player lands in the lobby with no retry loop.
 
 ### Phase 2: Initiative and turn logic (server)
-- [ ] **T5. Sort automatically and track turns by player ID** (#7, #8, #13). *Needs a decision on the DM's place in the list.*
-  - Recommended: take the DM out of `session.players` entirely (keep only `dmPlayerId`). That removes all the DM-skipping logic and the reorder length mismatch.
+- [ ] **T5. Sort automatically and track turns by player ID** (#7, #8, #13)
+  - **Decided:** take the DM out of `session.players` entirely (keep only `dmPlayerId`). That removes all the DM-skipping logic and the reorder length mismatch. NPCs stay in the list and take turns like players, and the DM controls them: the DM view marks NPC rows, and when an NPC's turn comes up the DM's view makes clear it's theirs to run.
+  - **Decided:** Next after the last entry loops back to the top of the initiative order and increments the round.
   - Sort by initiative (descending), breaking ties by join time, on join, NPC add and initiative update.
   - Track the current turn by player ID so sorts and removals keep the turn on the right player.
   - `reorderPlayers` should validate against the player IDs and return `INVALID_REORDER`.
   - Update the unit tests to match.
-  - **Done when:** the list is always sorted unless the DM has manually reordered, reorder works, the turn stays on the same player across sorts and removals, and all unit tests pass.
+  - **Done when:** the list is always sorted unless the DM has manually reordered, reorder works, the turn stays on the same player across sorts and removals, Next loops from the last entry to the top, and all unit tests pass.
 - [ ] **T6. Fix the `ADD_NPC` broadcast** (#9)
   - Broadcast a normal list update with no `dmPlayerId`.
   - Never set `isDM` from a broadcast, only from `SESSION_CREATED` or a `RECOVER_SESSION` reply.
   - **Done when:** players never see the DM toolbar.
 
 ### Phase 3: Spec features that are missing
-- [ ] **T7. Finish the DM and player controls** (#14, #15, #22). *Needs a decision on what Reset does.*
+- [ ] **T7. Finish the DM and player controls** (#14, #15, #22)
   - DM can edit a player's initiative inline (wire up the `updateInitiative` that already exists).
   - "Recover as DM" form in the lobby (room code and Admin Key), with a `localStorage` fallback.
   - Leave Session button.
-  - Reset behavior as decided.
+  - **Decided:** Reset starts a new combat (round 1, back at the top). *Still open:* whether players stay in the room for the new combat and re-enter their initiative, or have to rejoin.
   - Use the shared constants in the NPC form, and show readable error messages.
   - **Done when:** the spec's acceptance criteria for editing, recovery and reset pass in e2e.
 
@@ -113,7 +115,10 @@ Order: **Phase 0**, then **Phases 1 and 2 in parallel**, then **Phase 3**. Phase
 - T3 and T4 both touch `useSession.svelte.ts`, `wsClient.ts`, `wsHandler.ts` and `messages.ts`. Do them together or one after the other.
 - T5 and T6 both touch `sessionStore.ts` and `wsHandler.ts`. T5 changes the player model, so land it before T7.
 
-### Open decisions
-1. **Host for T2:** Railway, Fly.io, Render, or something else. None of them has a true free tier any more, and the in-memory design needs a machine that stays on.
-2. **DM in the player list for T5:** remove the DM from `players` (recommended), or keep the DM in the list as a non-turn entry.
-3. **What Reset does for T7:** clear all players, as the spec says, or only reset round and turn, as the code does today. Possibly offer both: "New combat" and "Restart rounds".
+### Decisions (2026-10-01)
+1. **Host:** Railway, on a paid account.
+2. **DM:** not in the player list. The DM runs the NPCs' turns.
+3. **Reset:** starts a new combat. **Next** after the last entry loops back to the top.
+
+### Open questions
+- On Reset, do players stay in the room and re-enter their initiative, or do they rejoin? Needed before T7.

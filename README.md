@@ -18,7 +18,7 @@ npm start        # serve the production build on $PORT (default 3000)
 
 ## Deploying (Railway)
 
-`.github/workflows/ci.yml` runs check, tests, build and a Docker build on every PR and every push to `master`. On `master`, once CI passes, it deploys with the Railway CLI (`railway up`). Railway then builds the `Dockerfile` and runs the settings in `railway.json`, including the `/health` healthcheck.
+`.github/workflows/ci.yml` runs check, tests, build and a Docker build on every PR and every push to `master`. On `master`, once CI passes, it deploys with the Railway CLI (`railway up`). The service settings live in `.railway/railway.ts` (Railway Infrastructure as Code). They cover the Dockerfile build, the `/health` healthcheck, the restart policy, 1 replica and no app sleeping. CI previews changes to them with `railway config plan` on every PR, and applies them with `railway config apply` before each deploy.
 
 One-time setup:
 
@@ -29,9 +29,6 @@ One-time setup:
    - add the secret `RAILWAY_TOKEN`, holding the project token
    - add the variable `RAILWAY_SERVICE`, holding the service name (for example `web`)
 
-Sessions live only in server memory, so:
-
-- keep the service at **1 replica**
-- leave **App Sleeping (serverless) off**
+Sessions live only in server memory, so `.railway/railway.ts` pins the service to **1 replica** with **App Sleeping off**. Don't change either in the Railway dashboard: the next deploy applies the file again.
 
 A deploy or restart ends every active session.

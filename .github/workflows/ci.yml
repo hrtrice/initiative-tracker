@@ -31,6 +31,16 @@ jobs:
           retention-days: 7
       - name: Docker image builds
         run: docker build -t initiative-tracker .
+      # Previews what .railway/railway.ts would change on the live service and fails
+      # if Railway rejects it. Skipped when the token isn't available (e.g. fork PRs).
+      - name: Check for Railway token
+        id: railway
+        run: echo "available=${{ secrets.RAILWAY_TOKEN != '' }}" >> "$GITHUB_OUTPUT"
+      - name: Preview Railway config changes
+        if: steps.railway.outputs.available == 'true'
+        run: npx --yes @railway/cli@5 config plan --verbose
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
 
   deploy:
     needs: ci
@@ -43,6 +53,18 @@ jobs:
       # so a "Service not found" failure shows what RAILWAY_SERVICE must match.
       - name: Show Railway target
         run: npx --yes @railway/cli@5 status || true
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      # .railway/railway.ts imports the railway SDK.
+      - run: npm ci
+      # Without --confirm-destructive, a change that would delete anything fails the
+      # deploy instead of happening silently.
+      - name: Apply Railway config
+        run: npx --yes @railway/cli@5 config apply --yes
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
       - name: Deploy to Railway

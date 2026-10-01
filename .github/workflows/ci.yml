@@ -39,6 +39,12 @@ jobs:
     concurrency: deploy-production
     steps:
       - uses: actions/checkout@v4
+      # Prints the project, environment and services the token can see (no secrets),
+      # so a "Service not found" failure shows what RAILWAY_SERVICE must match.
+      - name: Show Railway target
+        run: npx --yes @railway/cli@5 status || true
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
       - name: Deploy to Railway
         run: npx --yes @railway/cli@5 up --ci --service "$RAILWAY_SERVICE"
         env:

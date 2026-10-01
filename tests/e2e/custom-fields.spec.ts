@@ -30,6 +30,10 @@ test("DM manages custom fields; players fill in their own; NPC values stay secre
   await dm.getByRole("button", { name: "Add field" }).click();
   await expect(dm.getByLabel("Name of field Notes")).toBeVisible();
 
+  // Every field shows inline on every player's row, empty ones as "—".
+  await expect(chips(gimli, "Aragorn")).toHaveText(["AC —", "Notes —"]);
+  await expect(chips(dm, "Goblin")).toHaveText(["AC —", "Notes —"]);
+
   // Players only manage fields on their own row, and never see the manager.
   await expect(aragorn.locator(".fields-manager")).toHaveCount(0);
   await expect(aragorn.getByRole("button", { name: "Edit fields for Gimli" })).toHaveCount(0);
@@ -44,13 +48,13 @@ test("DM manages custom fields; players fill in their own; NPC values stay secre
   // The DM sets an NPC's value: visible to the DM only.
   await dm.getByRole("button", { name: "Edit fields for Goblin" }).click();
   await setValue(dm, "Goblin", "AC", "13");
-  await expect(chips(dm, "Goblin")).toHaveText(["AC 13"]);
+  await expect(chips(dm, "Goblin")).toHaveText(["AC 13", "Notes —"]);
   await expect(chips(aragorn, "Goblin")).toHaveCount(0);
 
   // Bad values are refused with a readable message.
   await setValue(dm, "Goblin", "AC", "9999");
   await expect(dm.locator(".error-banner")).toContainText("whole number");
-  await expect(chips(dm, "Goblin")).toHaveText(["AC 13"]);
+  await expect(chips(dm, "Goblin")).toHaveText(["AC 13", "Notes —"]);
 
   // Rename propagates to everyone.
   const acName = dm.getByLabel("Name of field AC");

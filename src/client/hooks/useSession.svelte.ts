@@ -13,28 +13,41 @@ type Credentials =
 
 const CREDENTIALS_KEY = "initiativeTracker.credentials";
 
+/**
+ * sessionStorage is this tab's own; localStorage is the fallback that survives closing
+ * the tab, so a phone that drops the page can still get back in.
+ */
+const stores = (): Storage[] => [sessionStorage, localStorage];
+
 function loadCredentials(): Credentials | null {
-  try {
-    const raw = sessionStorage.getItem(CREDENTIALS_KEY);
-    return raw ? (JSON.parse(raw) as Credentials) : null;
-  } catch {
-    return null;
+  for (const store of stores()) {
+    try {
+      const raw = store.getItem(CREDENTIALS_KEY);
+      if (raw) return JSON.parse(raw) as Credentials;
+    } catch {
+      // Storage unavailable or corrupt; try the next one.
+    }
   }
+  return null;
 }
 
 function saveCredentials(creds: Credentials): void {
-  try {
-    sessionStorage.setItem(CREDENTIALS_KEY, JSON.stringify(creds));
-  } catch {
-    // Storage unavailable (private mode); the session still works until refresh.
+  for (const store of stores()) {
+    try {
+      store.setItem(CREDENTIALS_KEY, JSON.stringify(creds));
+    } catch {
+      // Storage unavailable (private mode); the session still works until refresh.
+    }
   }
 }
 
 function clearCredentials(): void {
-  try {
-    sessionStorage.removeItem(CREDENTIALS_KEY);
-  } catch {
-    // ignore
+  for (const store of stores()) {
+    try {
+      store.removeItem(CREDENTIALS_KEY);
+    } catch {
+      // ignore
+    }
   }
 }
 
@@ -70,6 +83,8 @@ export function createSessionState() {
 
   /** True between sending a rebind and hearing back, so its errors can be told apart. */
   let rebinding = false;
+  /** The rebind was the DM typing in an Admin Key, so show the server's reason on failure. */
+  let manualRecover = false;
 
   function leaveSessionState(error: string | null) {
     clearCredentials();
@@ -116,6 +131,7 @@ export function createSessionState() {
         break;
       case "SESSION_STATE_SYNC": {
         rebinding = false;
+        manualRecover = false;
         const creds = loadCredentials();
         state.sessionId = msg.payload.sessionId;
         state.roomCode = msg.payload.roomCode;
@@ -140,7 +156,10 @@ export function createSessionState() {
       case "ERROR":
         if (rebinding && SESSION_GONE_CODES.has(msg.payload.code)) {
           rebinding = false;
-          leaveSessionState("That session has ended, or you're no longer in it.");
+          leaveSessionState(
+            manualRecover ? msg.payload.message : "That session has ended, or you're no longer in it."
+          );
+          manualRecover = false;
         } else {
           state.error = msg.payload.message;
         }
@@ -213,6 +232,21 @@ export function createSessionState() {
     previousTurn: () => dmCommand("PREVIOUS_TURN", {}),
     resetSession: () => dmCommand("RESET_SESSION", {}),
     addNpc: (name: string, initiative: number) => dmCommand("ADD_NPC", { name, initiative }),
+    /** Rejoin as DM from another device or after clearing the browser, using the Admin Key. */
+    recoverAsDm: (roomCode: string, dmToken: string) => {
+      saveCredentials({ role: "dm", roomCode: roomCode.trim().toUpperCase(), dmToken: dmToken.trim() });
+      manualRecover = true;
+      state.error = null;
+      if (wsClient.status === "connected") rebind();
+      else wsClient.connect(); // rebinds on open
+    },
+    submitInitiative: (initiative: number) => {
+      wsClient.send({ type: "SUBMIT_INITIATIVE", payload: { initiative } });
+    },
+    leaveSession: () => {
+      wsClient.send({ type: "LEAVE_SESSION", payload: {} });
+      leaveSessionState(null);
+    },
     clearError: () => {
       state.error = null;
     },

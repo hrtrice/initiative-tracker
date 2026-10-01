@@ -6,12 +6,28 @@
   let {
     createSession,
     joinSession,
+    recoverAsDm,
     connectionStatus,
   }: {
     createSession: () => void;
     joinSession: (roomCode: string, characterName: string, initiative: number) => void;
+    recoverAsDm: (roomCode: string, dmToken: string) => void;
     connectionStatus: ConnectionStatus;
   } = $props();
+
+  let recoverCode = $state("");
+  let recoverKey = $state("");
+  let recoverError = $state("");
+
+  function handleRecover(event: SubmitEvent) {
+    event.preventDefault();
+    recoverError = "";
+    if (recoverCode.trim().length !== ROOM_CODE_LENGTH || !recoverKey.trim()) {
+      recoverError = "Enter the room code and the full Admin Key";
+      return;
+    }
+    recoverAsDm(recoverCode, recoverKey);
+  }
 
   let roomCode = $state("");
   let roomCodeError = $state("");
@@ -61,4 +77,24 @@
 
     <PlayerEntry onsubmit={handleJoin} />
   </div>
+
+  <details class="recover-section card">
+    <summary>Rejoin as DM</summary>
+    <form onsubmit={handleRecover}>
+      <div class="form-group">
+        <label for="recoverCode">Room Code</label>
+        <input id="recoverCode" type="text" inputmode="numeric" bind:value={recoverCode} maxlength={ROOM_CODE_LENGTH} autocomplete="off" />
+      </div>
+      <div class="form-group">
+        <label for="recoverKey">Admin Key</label>
+        <input id="recoverKey" type="text" bind:value={recoverKey} autocomplete="off" spellcheck="false" />
+      </div>
+      {#if recoverError}
+        <p class="field-error">{recoverError}</p>
+      {/if}
+      <div class="submit-row">
+        <button type="submit" class="btn-secondary">Rejoin as DM</button>
+      </div>
+    </form>
+  </details>
 </div>

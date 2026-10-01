@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { MIN_INITIATIVE, MAX_INITIATIVE } from "../lib/types";
   import type { PlayerView } from "../lib/types";
 
   let {
@@ -8,6 +9,7 @@
     currentPlayer,
     onRemovePlayer,
     onReorderPlayers,
+    onUpdateInitiative,
   }: {
     players: PlayerView[];
     isDM?: boolean;
@@ -15,7 +17,34 @@
     currentPlayer: PlayerView | null;
     onRemovePlayer?: (playerId: string) => void;
     onReorderPlayers?: (orderedPlayerIds: string[]) => void;
+    onUpdateInitiative?: (playerId: string, initiative: number) => void;
   } = $props();
+
+  /** The row whose initiative the DM is editing, and the draft value. */
+  let editingId = $state<string | null>(null);
+  let draft = $state<number | null>(null);
+
+  function startEdit(player: PlayerView) {
+    editingId = player.id;
+    draft = player.initiative;
+  }
+
+  function commitEdit(player: PlayerView) {
+    if (editingId !== player.id) return;
+    editingId = null;
+    if (draft === null || !Number.isInteger(draft) || draft === player.initiative) return;
+    onUpdateInitiative?.(player.id, draft);
+  }
+
+  function onEditKey(event: KeyboardEvent, player: PlayerView) {
+    if (event.key === "Enter") commitEdit(player);
+    if (event.key === "Escape") editingId = null;
+  }
+
+  function focusOnMount(node: HTMLInputElement) {
+    node.focus();
+    node.select();
+  }
 
   // The server sends players in turn order; swap neighbours and send the full new order.
   function swap(a: number, b: number) {
@@ -33,7 +62,31 @@
   <ul class="player-list">
     {#each players as player, i (player.id)}
       <li class="player-row" class:current-turn={currentPlayer?.id === player.id}>
-        <span class="initiative">{player.initiative}</span>
+        <span class="initiative">
+          {#if isDM && editingId === player.id}
+            <input
+              class="initiative-edit"
+              type="number"
+              inputmode="numeric"
+              min={MIN_INITIATIVE}
+              max={MAX_INITIATIVE}
+              bind:value={draft}
+              onblur={() => commitEdit(player)}
+              onkeydown={(e) => onEditKey(e, player)}
+              aria-label="Initiative for {player.name}"
+              use:focusOnMount
+            />
+          {:else if isDM}
+            <button
+              type="button"
+              class="initiative-btn initiative"
+              onclick={() => startEdit(player)}
+              aria-label="Edit initiative for {player.name}"
+            >{player.initiative ?? "—"}</button>
+          {:else}
+            {player.initiative ?? "—"}
+          {/if}
+        </span>
         <span class="name">
           {player.name}
           {#if isDM && player.isNpc}

@@ -4,6 +4,7 @@
   import PlayerList from "./components/PlayerList.svelte";
   import TurnIndicator from "./components/TurnIndicator.svelte";
   import DMToolbar from "./components/DMToolbar.svelte";
+  import InitiativePrompt from "./components/InitiativePrompt.svelte";
 
   const {
     state: sessionState,
@@ -15,12 +16,28 @@
     previousTurn,
     resetSession,
     addNpc,
+    updateInitiative,
+    recoverAsDm,
+    submitInitiative,
+    leaveSession,
     clearError,
   } = createSessionState();
 
   let currentPlayer = $derived(
     sessionState.players.find((p) => p.id === sessionState.turnState?.currentPlayerId) ?? null
   );
+
+  let needsInitiative = $derived(
+    !sessionState.isDM &&
+      sessionState.players.some((p) => p.id === sessionState.playerId && p.initiative === null)
+  );
+
+  function confirmLeave() {
+    const message = sessionState.isDM
+      ? "Leave this session? It keeps running, and you can rejoin with the room code and Admin Key."
+      : "Leave this session? You'll be removed from the initiative order.";
+    if (confirm(message)) leaveSession();
+  }
 </script>
 
 {#if sessionState.error}
@@ -31,7 +48,7 @@
 {/if}
 
 {#if !sessionState.sessionId}
-  <Lobby {createSession} {joinSession} connectionStatus={sessionState.connectionStatus} />
+  <Lobby {createSession} {joinSession} {recoverAsDm} connectionStatus={sessionState.connectionStatus} />
 {:else}
   <main class="session-view">
     <TurnIndicator
@@ -42,6 +59,10 @@
       connectionStatus={sessionState.connectionStatus}
     />
 
+    {#if needsInitiative}
+      <InitiativePrompt onsubmit={submitInitiative} />
+    {/if}
+
     <PlayerList
       players={sessionState.players}
       isDM={sessionState.isDM}
@@ -49,6 +70,7 @@
       {currentPlayer}
       onRemovePlayer={removePlayer}
       onReorderPlayers={reorderPlayers}
+      onUpdateInitiative={updateInitiative}
     />
 
     <DMToolbar
@@ -60,5 +82,9 @@
       onResetSession={resetSession}
       onAddNpc={addNpc}
     />
+
+    <div class="leave-row">
+      <button class="btn-ghost" onclick={confirmLeave}>Leave session</button>
+    </div>
   </main>
 {/if}

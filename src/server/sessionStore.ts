@@ -38,7 +38,9 @@ export function validateName(raw: unknown): string {
 }
 
 export function validateInitiative(raw: unknown): number {
-  const init = typeof raw === "number" ? raw : Number(raw);
+  // Blank and null must not coerce to 0.
+  const init =
+    typeof raw === "number" ? raw : typeof raw === "string" && raw.trim() ? Number(raw) : NaN;
   if (!Number.isInteger(init) || init < MIN_INITIATIVE || init > MAX_INITIATIVE) {
     throw new ServerError(
       ErrorCode.INVALID_INITIATIVE,
@@ -48,12 +50,15 @@ export function validateInitiative(raw: unknown): number {
   return init;
 }
 
+/** Pending (null) initiative ranks below every roll. */
+const rank = (p: Player) => p.initiative ?? -Infinity;
+
 /**
  * Insert below every entry with equal or higher initiative, so ties keep join order
  * and the DM's manual reorders of other entries are left alone.
  */
 function insertByInitiative(players: Player[], player: Player): void {
-  const idx = players.findIndex((p) => p.initiative < player.initiative);
+  const idx = players.findIndex((p) => rank(p) < rank(player));
   if (idx === -1) players.push(player);
   else players.splice(idx, 0, player);
 }
@@ -142,7 +147,8 @@ export class SessionStore {
     return removed!;
   }
 
-  updateInitiative(session: Session, playerId: string, initiative: number): void {
+  /** DM edit: sets anyone's initiative, pending or not, and moves them into place. */
+  updateInitiative(session: Session, playerId: string, initiative: unknown): void {
     const value = validateInitiative(initiative);
     const idx = session.players.findIndex((p) => p.id === playerId);
     if (idx === -1) {
@@ -152,6 +158,21 @@ export class SessionStore {
     player!.initiative = value;
     insertByInitiative(session.players, player!);
     this.touch(session);
+  }
+
+  /** A player entering their own roll for a new combat. Once set, only the DM can change it. */
+  submitInitiative(session: Session, playerId: string, initiative: unknown): void {
+    const player = session.players.find((p) => p.id === playerId);
+    if (!player) {
+      throw new ServerError(ErrorCode.PLAYER_NOT_FOUND, "You're no longer in this session");
+    }
+    if (player.initiative !== null) {
+      throw new ServerError(
+        ErrorCode.UNAUTHORIZED,
+        "Your initiative is already set. Ask the DM if it needs changing."
+      );
+    }
+    this.updateInitiative(session, playerId, initiative);
   }
 
   reorderPlayers(session: Session, orderedPlayerIds: unknown): void {
@@ -200,8 +221,13 @@ export class SessionStore {
     this.touch(session);
   }
 
-  /** New combat: round 1, turn back at the top of the order. */
+  /**
+   * New combat: the previous fight's NPCs are removed, players stay with their
+   * initiative cleared until they re-enter it, and the turn goes back to round 1.
+   */
   reset(session: Session): void {
+    session.players = session.players.filter((p) => !p.isNpc);
+    for (const p of session.players) p.initiative = null;
     session.status = "WAITING";
     session.turnState = { currentPlayerId: null, round: 1 };
     this.touch(session);

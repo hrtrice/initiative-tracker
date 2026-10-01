@@ -1,19 +1,14 @@
 <script lang="ts">
   import { MIN_NAME_LENGTH, MAX_NAME_LENGTH, MIN_INITIATIVE, MAX_INITIATIVE } from "../lib/types";
-  import type { Player } from "../lib/types";
 
   let {
-    existingPlayer,
-    isDM = false,
     onsubmit,
   }: {
-    existingPlayer?: Player | null;
-    isDM?: boolean;
     onsubmit?: (data: { name: string; initiative: number }) => void;
   } = $props();
 
-  let name = $state(existingPlayer?.name ?? "");
-  let initiativeStr = $state(existingPlayer?.initiative.toString() ?? "0");
+  let name = $state("");
+  let initiativeStr = $state("0");
   let nameError = $state("");
   let initiativeError = $state("");
 
@@ -78,7 +73,7 @@
 
   <div class="submit-row">
     <button type="submit" class="btn-primary">
-      {existingPlayer ? "Update" : "Join"}
+      Join
     </button>
   </div>
 </form>

@@ -18,7 +18,8 @@ export interface Player {
   id: string;
   sessionId: string;
   name: string;
-  initiative: number;
+  /** null while waiting for the player to roll for a new combat. */
+  initiative: number | null;
   /** NPCs are added and run by the DM; they have no connection or token. */
   isNpc: boolean;
   clientId: string | null;
@@ -30,7 +31,7 @@ export interface Player {
 export interface PlayerView {
   id: string;
   name: string;
-  initiative: number;
+  initiative: number | null;
   isNpc: boolean;
 }
 

@@ -112,14 +112,26 @@ Order: **Phase 0**, then **Phases 1 and 2 in parallel**, then **Phase 3**. Phase
   - Verified with 89 unit tests and a 22-check browser run (plus a rerun of the 28-check Phase 1–2 browser run).
 
 ### Phase 4: Dev experience and polish
-- [ ] **T8. Get `npm run dev` and the e2e suite working** (#16)
-  - Set `"/ws": { target: "ws://localhost:3000", ws: true }`.
-  - Run Playwright in CI.
-  - **Done when:** `npm run test:e2e` passes locally and in CI.
-- [ ] **T9. PWA assets and static-serving hardening** (#18, #19)
-  - Add the icons and favicon, and link the manifest.
-  - Serve only the client build directory (for example, `dist/client`), not `dist/`.
-  - **Done when:** there are no 404s on page load and `/server/index.cjs` returns 404.
+- [x] **T8. Get `npm run dev` and the e2e suite working** (#16)
+  - The Vite proxy for `/ws` now sets `ws: true`. Checked with `npm run dev`: a DM and a player complete a session through `localhost:5173/ws`.
+  - `npm run test:e2e` was broken in a second way: it never passed the config's path. It now builds first, then runs `playwright test --config tests/e2e/playwright.config.ts`.
+  - The old specs relied on `data-testid`s that didn't exist and on the old behavior, and ran DM and player in one shared browser context. They've been replaced by 14 tests covering every flow:
+    - joining
+    - sorting and turns
+    - reorder and inline edit
+    - removal
+    - refresh and reopening a tab
+    - a dropped socket, cut through a TCP proxy
+    - new combat
+    - Admin Key recovery
+    - leaving
+    - the app shell
+  - Tests run against the production build on a Pixel 7 profile, with one browser context per person. Retries are off, and the suite passed 42/42 over three repeats.
+  - CI installs Chromium and runs the suite after the build, and uploads traces when it fails.
+- [x] **T9. PWA assets and static-serving hardening** (#18, #19)
+  - Vite now builds to `dist/client` and Express serves only that folder, so `/server/index.cjs` returns 404 (covered by a test).
+  - A new d20 icon (`public/icon.svg`) is rendered to 192/512 manifest icons, an apple-touch-icon and a 32px favicon. `index.html` links the manifest, the icons and `theme-color`. A test checks that a page load has no failed requests and every manifest icon returns 200.
+  - The service worker now only handles same-origin GETs. When offline, a navigation falls back to the cached app shell instead of answering with `undefined`.
 
 ### Overlap notes
 - T3 and T4 both touch `useSession.svelte.ts`, `wsClient.ts`, `wsHandler.ts` and `messages.ts`. Do them together or one after the other.

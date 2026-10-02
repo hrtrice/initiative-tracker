@@ -1,5 +1,6 @@
 <script lang="ts">
   import { MIN_NAME_LENGTH, MAX_NAME_LENGTH, MIN_INITIATIVE, MAX_INITIATIVE } from "../lib/types";
+  import InitiativeRoller from "./InitiativeRoller.svelte";
 
   let {
     onsubmit,
@@ -69,6 +70,7 @@
     {#if initiativeError}
       <p class="field-error">{initiativeError}</p>
     {/if}
+    <InitiativeRoller onroll={(total) => (initiativeStr = String(total))} />
   </div>
 
   <div class="submit-row">

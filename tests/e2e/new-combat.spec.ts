@@ -27,7 +27,7 @@ test("New combat keeps players, clears rolls and NPCs, and players re-roll", asy
   await addNpc(dm, "Orc", 3);
   await expect(gimli.getByText("Roll for Initiative!")).toBeVisible();
   await gimli.getByLabel("Your initiative", { exact: true }).fill("17");
-  await gimli.getByRole("button", { name: "Take My Place" }).click();
+  await gimli.getByRole("button", { name: "Claim 17" }).click();
   await expect(gimli.locator(".initiative-prompt")).toHaveCount(0);
 
   // Rolled entries sort by roll; anyone still pending waits at the bottom.

@@ -76,7 +76,11 @@
 {:else}
   <ul class="player-list">
     {#each players as player, i (player.id)}
-      <li class="player-row" class:current-turn={currentPlayer?.id === player.id}>
+      <li
+        class="player-row"
+        class:npc={player.isNpc}
+        class:current-turn={currentPlayer?.id === player.id}
+      >
         <span class="initiative">
           {#if isDM && editingId === player.id}
             <input

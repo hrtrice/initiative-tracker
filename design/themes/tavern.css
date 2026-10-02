@@ -1,0 +1,39 @@
+/*
+ * Tavern Board: paper notices pinned to a wood board, brass accents. Not wired into the app yet.
+ * Same tokens as src/client/app.css, plus two this theme needs: cards are light paper on a
+ * dark wood background, so text drawn directly on the background (section titles, the leave
+ * button, empty states) needs its own colours. When adding theme switching, use
+ * --color-text-on-bg / --color-text-muted-on-bg for those places (they equal
+ * --color-text / --color-text-muted in the other themes).
+ * All text pairings checked against WCAG AA.
+ * Mockup: design/themes/mockups.html?theme=tavern
+ * Fonts in the mockup: "Uncial Antiqua" (headings; too ornate for names, whose "g" reads as "s"),
+ * "Alegreya Sans" (body).
+ */
+[data-theme="tavern"] {
+  --color-bg: #4a2e1b;
+  --bg-image: repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.18) 0 2px, transparent 2px 64px);
+  --color-card: #f1e2bf;
+  --color-surface: #f1e2bf;
+  --color-border: #6b4a2a;
+  --color-text: #2a1a0e;
+  --color-text-muted: #6b4a2a;
+  --color-text-on-bg: #f2e2bc;
+  --color-text-muted-on-bg: #e8cf9a;
+  --color-accent: #6a4020;
+  --color-accent-hover: #7a4a26;
+  --color-highlight: #8a3d12;
+  --color-highlight-hover: #a14a18;
+  --color-on-highlight: #f6e2b0;
+  --color-error: #7a2a16;
+  --color-error-hover: #8f3420;
+  --color-on-error: #f6e2b0;
+  --color-error-text: #7a2a16;
+  --color-success: #4f6b2a;
+  --color-warning: #c99a3a;
+  --color-on-warning: #2a1a0e;
+  --color-current-turn: #f8ecd0;
+  --shadow-current-turn: 0 0 0 3px #f2d27a, 0 10px 18px rgba(0, 0, 0, 0.6);
+  --color-pc: #6b4a2a;
+  --color-npc: #8a2a12;
+}

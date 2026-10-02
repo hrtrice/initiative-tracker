@@ -3,6 +3,8 @@
   import type { CustomField, FieldValue, PlayerView } from "../lib/types";
   import FieldEditor from "./FieldEditor.svelte";
   import NpcIcon from "./NpcIcon.svelte";
+  import D20 from "./D20.svelte";
+  import QuillIcon from "./QuillIcon.svelte";
 
   let {
     players = [],
@@ -101,9 +103,9 @@
               class="initiative-btn initiative"
               onclick={() => startEdit(player)}
               aria-label="Edit initiative for {player.name}"
-            >{player.initiative ?? "—"}</button>
+            ><D20>{player.initiative ?? "—"}</D20></button>
           {:else}
-            {player.initiative ?? "—"}
+            <D20>{player.initiative ?? "—"}</D20>
           {/if}
         </span>
         <span class="name">
@@ -121,7 +123,7 @@
             onclick={() => (editingFieldsOf = editingFieldsOf === player.id ? null : player.id)}
             aria-expanded={editingFieldsOf === player.id}
             aria-label="Edit fields for {player.name}"
-          >&#9998;</button>
+          ><QuillIcon /></button>
         {/if}
         {#if isDM}
           <div class="controls">

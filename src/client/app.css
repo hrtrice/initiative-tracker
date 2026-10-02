@@ -20,13 +20,11 @@
   --color-text-muted: #a8987a;
   /* Secondary buttons and badges */
   --color-accent: #3a2e22;
-  --color-accent-hover: #4a3b2b;
   /* Primary actions, focus, the current turn */
   --color-highlight: #e0a84a;
   --color-highlight-hover: #f3c46b;
   --color-on-highlight: #1b130b;
   --color-error: #a3342b;
-  --color-error-hover: #b9443a;
   --color-on-error: #f7e9e4;
   /* Error text on dark backgrounds (the button crimson is too dark to read) */
   --color-error-text: #e0675c;
@@ -34,14 +32,43 @@
   --color-warning: #d9822b;
   --color-on-warning: #1b130b;
   --color-current-turn: #33281b;
-  --shadow-current-turn: 0 0 0 1px rgba(224, 168, 74, 0.5), 0 0 22px rgba(232, 140, 50, 0.4);
+  --shadow-current-turn: 0 0 0 1px rgba(224, 168, 74, 0.5);
   /* Row edges: players vs NPCs */
   --color-pc: #b08a46;
   --color-npc: #d0503f;
+  /* Small decorative marks (banner stars, divider rules) */
+  --color-ornament: #8a6a3a;
 
-  --radius-sm: 0.375rem;
-  --radius-md: 0.625rem;
-  --radius-lg: 1rem;
+  /*
+   * Surfaces: carved stone lit from above. Like the colours, these are per-theme.
+   */
+  --bg-texture: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .55 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.35'/%3E%3C/svg%3E");
+  --card-bg: linear-gradient(#2c241d, #1c1713);
+  --card-shadow: inset 0 1px 0 rgba(255, 220, 160, 0.08), inset 0 -8px 20px rgba(0, 0, 0, 0.4),
+    0 6px 18px rgba(0, 0, 0, 0.5);
+  --row-bg: linear-gradient(#27211b, #1d1814);
+  --row-shadow: inset 0 1px 0 rgba(255, 220, 160, 0.05), 0 3px 8px rgba(0, 0, 0, 0.45);
+  --row-current-bg: linear-gradient(#3a2d1e, #261d14);
+  /* The torch glow on the current turn (flickers; see .player-row.current-turn::after). */
+  --glow-current-turn: 0 0 22px rgba(232, 140, 50, 0.45), inset 0 0 24px rgba(232, 140, 50, 0.12);
+  --text-glow: 0 0 18px rgba(240, 150, 60, 0.55);
+  --btn-bg: linear-gradient(#332a21, #231d17);
+  --btn-bg-hover: linear-gradient(#3e3328, #2a231c);
+  --btn-border: #5a4630;
+  --btn-primary-bg: linear-gradient(#f3c46b, #c98a32);
+  --btn-primary-bg-hover: linear-gradient(#f7d184, #d89a40);
+  --btn-primary-border: #f0c070;
+  --btn-primary-glow: 0 0 14px rgba(240, 160, 70, 0.35);
+  --btn-danger-bg: linear-gradient(#5a1f1a, #3c1411);
+  --btn-danger-bg-hover: linear-gradient(#6c2620, #481813);
+  --btn-danger-border: #7a2a22;
+  /* The d20 initiative badge */
+  --d20-fill: rgba(0, 0, 0, 0.35);
+  --d20-stroke: #c99a52;
+
+  --radius-sm: 0.1875rem;
+  --radius-md: 0.3125rem;
+  --radius-lg: 0.4375rem;
 
   /* Bundled via @fontsource (see main.ts); the fallbacks keep the serif feel if they fail. */
   --font-display: "Cinzel", "Trajan Pro", Georgia, serif;
@@ -64,8 +91,8 @@ body {
   /* Alegreya defaults to old-style figures, which make AC and initiative values look uneven. */
   font-variant-numeric: lining-nums;
   background-color: var(--color-bg);
-  background-image: var(--bg-image);
-  background-attachment: fixed;
+  background-image: var(--bg-image), var(--bg-texture);
+  background-attachment: fixed, scroll;
   color: var(--color-text);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
@@ -131,21 +158,24 @@ button:active {
 }
 
 .btn-primary {
-  background-color: var(--color-highlight);
+  background: var(--btn-primary-bg);
+  border: 1px solid var(--btn-primary-border);
+  box-shadow: var(--btn-primary-glow);
   color: var(--color-on-highlight);
 }
 
 .btn-primary:hover {
-  background-color: var(--color-highlight-hover);
+  background: var(--btn-primary-bg-hover);
 }
 
 .btn-secondary {
-  background-color: var(--color-accent);
+  background: var(--btn-bg);
+  border: 1px solid var(--btn-border);
   color: var(--color-text);
 }
 
 .btn-secondary:hover {
-  background-color: var(--color-accent-hover);
+  background: var(--btn-bg-hover);
 }
 
 .btn-ghost {
@@ -160,12 +190,13 @@ button:active {
 }
 
 .btn-danger {
-  background-color: var(--color-error);
+  background: var(--btn-danger-bg);
+  border: 1px solid var(--btn-danger-border);
   color: var(--color-on-error);
 }
 
 .btn-danger:hover {
-  background-color: var(--color-error-hover);
+  background: var(--btn-danger-bg-hover);
 }
 
 .btn-icon {
@@ -228,9 +259,11 @@ label {
 
 .card {
   background-color: var(--color-card);
+  background-image: var(--card-bg);
   border-radius: var(--radius-lg);
   padding: 1.25rem;
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--btn-border);
+  box-shadow: var(--card-shadow);
 }
 
 .error-banner {
@@ -279,14 +312,17 @@ label {
 }
 
 .player-row {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 0.75rem;
   background-color: var(--color-surface);
+  background-image: var(--row-bg);
   border-radius: var(--radius-md);
-  padding: 0.625rem 0.75rem;
+  padding: 0.5rem 0.75rem 0.5rem 0.5rem;
   border: 1px solid var(--color-border);
   border-left: 4px solid var(--color-pc);
+  box-shadow: var(--row-shadow);
   transition: background-color var(--transition-normal), border-color var(--transition-normal),
     box-shadow var(--transition-normal);
 }
@@ -297,17 +333,44 @@ label {
 
 .player-row.current-turn {
   background-color: var(--color-current-turn);
+  background-image: var(--row-current-bg);
   border-color: var(--color-highlight);
   box-shadow: var(--shadow-current-turn);
+}
+
+/* The torch glow lives on its own layer so it can flicker without repainting the row. */
+.player-row.current-turn::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  box-shadow: var(--glow-current-turn);
+  pointer-events: none;
+  animation: torch-flicker 3.2s ease-in-out infinite;
+}
+
+@keyframes torch-flicker {
+  0%, 100% { opacity: 1; }
+  18% { opacity: 0.82; }
+  32% { opacity: 0.95; }
+  47% { opacity: 0.7; }
+  61% { opacity: 0.92; }
+  78% { opacity: 0.8; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .player-row.current-turn::after {
+    animation: none;
+  }
 }
 
 .player-row .initiative {
   font-family: var(--font-display);
   font-size: 1rem;
-  font-weight: 700;
-  min-width: 2.5rem;
+  font-weight: 800;
+  min-width: 2.75rem;
   text-align: center;
-  color: var(--color-highlight);
+  color: var(--color-highlight-hover);
 }
 
 .player-row .name {
@@ -323,8 +386,8 @@ label {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  background-color: var(--color-accent);
-  color: var(--color-text);
+  background-color: var(--color-pc);
+  color: var(--color-on-highlight);
   padding: 0.125rem 0.375rem;
   border-radius: var(--radius-sm);
 }
@@ -344,7 +407,7 @@ label {
   flex-wrap: wrap;
   gap: 0.25rem;
   flex-basis: 100%;
-  padding-left: calc(2.5rem + 0.75rem);
+  padding-left: calc(2.75rem + 0.75rem);
   order: 1;
 }
 
@@ -352,6 +415,7 @@ label {
   white-space: nowrap;
   font-size: 0.75rem;
   color: var(--color-text-muted);
+  background-color: rgba(0, 0, 0, 0.25);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   padding: 0 0.375rem;
@@ -440,16 +504,36 @@ label {
 }
 
 .turn-indicator {
+  position: relative;
   text-align: center;
   padding: 1.25rem;
   margin-bottom: 1rem;
+}
+
+/* Little stars in the banner's top corners. */
+.turn-indicator::before,
+.turn-indicator::after {
+  content: "\2726";
+  position: absolute;
+  top: 0.625rem;
+  font-size: 0.75rem;
+  color: var(--color-ornament);
+}
+
+.turn-indicator::before {
+  left: 0.75rem;
+}
+
+.turn-indicator::after {
+  right: 0.75rem;
 }
 
 .turn-indicator .player-name {
   font-family: var(--font-display);
   font-size: 1.625rem;
   font-weight: 800;
-  color: var(--color-highlight);
+  color: var(--color-highlight-hover);
+  text-shadow: var(--text-glow);
 }
 
 .turn-indicator .round-info {
@@ -493,7 +577,10 @@ label {
   font-family: var(--font-display);
   font-weight: 800;
   letter-spacing: 0.2em;
-  background-color: var(--color-card);
+  color: var(--color-highlight-hover);
+  text-shadow: var(--text-glow);
+  background-color: rgba(0, 0, 0, 0.3);
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.5);
   padding: 0.75rem;
   border-radius: var(--radius-md);
   cursor: pointer;
@@ -525,10 +612,52 @@ label {
 
 .player-row .initiative-btn {
   background: none;
-  border: 1px dashed var(--color-text-muted);
-  border-radius: var(--radius-sm);
-  padding: 0.125rem 0.25rem;
+  border: none;
+  padding: 0;
+  min-height: auto;
+  font-size: inherit;
+  font-weight: inherit;
+  letter-spacing: normal;
+  color: inherit;
   cursor: pointer;
+}
+
+.player-row .initiative-btn:hover .d20 {
+  filter: brightness(1.25);
+}
+
+.d20 {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  vertical-align: middle;
+}
+
+.d20 svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.d20 svg .face {
+  fill: var(--d20-fill);
+  stroke: var(--d20-stroke);
+}
+
+.d20 svg .facets {
+  fill: none;
+  stroke: var(--d20-stroke);
+  opacity: 0.45;
+}
+
+.d20 .d20-value {
+  position: relative;
+  padding-top: 0.125rem;
+  /* Lifts the number off the facet lines behind it. */
+  text-shadow: 0 0 3px var(--color-bg), 0 0 6px var(--color-bg);
 }
 
 .initiative-prompt {
@@ -601,6 +730,44 @@ label {
 .lobby .create-section button {
   font-size: 1.125rem;
   padding: 1rem 2rem;
+}
+
+.lobby .room-code-input {
+  text-align: center;
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+}
+
+/* The hint is longer than a code, so it drops the wide carved-number styling to fit. */
+.lobby .room-code-input::placeholder {
+  font-family: var(--font-body);
+  font-size: 1rem;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+/* A rule with a star in the middle: ─── ✦ ─── */
+.divider {
+  border: none;
+  height: 1rem;
+  background:
+    linear-gradient(var(--color-ornament), var(--color-ornament)) left center / calc(50% - 1.25rem) 1px no-repeat,
+    linear-gradient(var(--color-ornament), var(--color-ornament)) right center / calc(50% - 1.25rem) 1px no-repeat;
+  position: relative;
+  overflow: visible;
+}
+
+.divider::after {
+  content: "\2726";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 0.75rem;
+  line-height: 1;
+  color: var(--color-ornament);
 }
 
 .lobby .join-section {

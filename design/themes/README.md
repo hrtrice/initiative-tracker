@@ -28,5 +28,12 @@ Every colour in the app comes from the CSS custom properties in the `:root` bloc
 Every text and background pairing in all three palettes meets WCAG AA contrast (4.5:1 for text, 3:1
 for the player/NPC edge colours).
 
-Only colours are captured here so far. Fonts, textures and shapes for each direction are in
-`mockups.html` and will move into the app as the Torchlit design is built out.
+Each palette also sets the surface tokens: background texture, card and row gradients, button
+fills, the current-turn glow (Torchlit flickers it; the others set it to `none`), the d20 badge
+colours and corner radii. A few touches are structural rather than token-driven and are only in
+`mockups.html` for now: Tome's wax-seal marker on the current turn and double-ruled banner, and
+Tavern's tilted, brass-pinned notes.
+
+Fonts: Torchlit's Cinzel and Alegreya are bundled via `@fontsource` and set through the
+`--font-display` / `--font-body` tokens. The other themes' fonts (named at the top of each file)
+would need their `@fontsource` packages added, plus `--font-display` / `--font-body` overrides.

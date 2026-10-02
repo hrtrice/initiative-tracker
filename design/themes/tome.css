@@ -13,12 +13,10 @@
   --color-text: #2b1d12;
   --color-text-muted: #6b5843;
   --color-accent: #e2d0a8;
-  --color-accent-hover: #d8c296;
   --color-highlight: #7d1a17;
   --color-highlight-hover: #962420;
   --color-on-highlight: #f3e6c8;
   --color-error: #8f1d1d;
-  --color-error-hover: #a52a24;
   --color-on-error: #f7ece0;
   --color-error-text: #8f1d1d;
   --color-success: #3f6b2a;
@@ -28,4 +26,29 @@
   --shadow-current-turn: 0 0 0 1px rgba(125, 26, 23, 0.45);
   --color-pc: #5b3b22;
   --color-npc: #7d1a17;
+  --color-ornament: #7d1a17;
+  /* Surfaces: flat inked parchment, no stone or glow. */
+  --bg-texture: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.6' numOctaves='4'/%3E%3CfeColorMatrix values='0 0 0 0 .45 0 0 0 0 .3 0 0 0 0 .1 0 0 0 .5 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.28'/%3E%3C/svg%3E");
+  --card-bg: linear-gradient(rgba(255, 250, 235, 0.35), rgba(255, 250, 235, 0.35));
+  --card-shadow: none;
+  --row-bg: none;
+  --row-shadow: none;
+  --row-current-bg: linear-gradient(rgba(125, 26, 23, 0.08), rgba(125, 26, 23, 0.08));
+  --glow-current-turn: none;
+  --text-glow: none;
+  --btn-bg: none;
+  --btn-bg-hover: linear-gradient(rgba(91, 59, 34, 0.1), rgba(91, 59, 34, 0.1));
+  --btn-border: #5b3b22;
+  --btn-primary-bg: linear-gradient(#7d1a17, #7d1a17);
+  --btn-primary-bg-hover: linear-gradient(#962420, #962420);
+  --btn-primary-border: #5c0f0d;
+  --btn-primary-glow: none;
+  --btn-danger-bg: none;
+  --btn-danger-bg-hover: linear-gradient(rgba(125, 26, 23, 0.1), rgba(125, 26, 23, 0.1));
+  --btn-danger-border: #7d1a17;
+  --d20-fill: rgba(255, 250, 235, 0.4);
+  --d20-stroke: #5b3b22;
+  --radius-sm: 0.125rem;
+  --radius-md: 0.1875rem;
+  --radius-lg: 0.25rem;
 }

@@ -56,7 +56,7 @@
     </button>
   </div>
 
-  <hr />
+  <hr class="divider" />
 
   <div class="join-section card">
     <div class="form-group">
@@ -67,7 +67,7 @@
         bind:value={roomCode}
         placeholder="Enter 4-digit code"
         maxlength={ROOM_CODE_LENGTH}
-        style="text-transform: uppercase; letter-spacing: 0.25em; font-family: var(--font-display); text-align: center; font-size: 1.25rem;"
+        class="room-code-input"
         autocomplete="off"
       />
       {#if roomCodeError}

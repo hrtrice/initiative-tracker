@@ -1,4 +1,4 @@
-/* Torchlit Dungeon (live default). Mirrors the :root colour tokens in src/client/app.css. */
+/* Torchlit Dungeon (live default). Mirrors the :root colour and surface tokens in src/client/app.css. */
 [data-theme="torchlit"] {
   --color-bg: #15110e;
   --bg-image: radial-gradient(120% 60% at 50% 0%, rgba(224, 140, 60, 0.12), transparent 60%);
@@ -9,13 +9,11 @@
   --color-text-muted: #a8987a;
   /* Secondary buttons and badges */
   --color-accent: #3a2e22;
-  --color-accent-hover: #4a3b2b;
   /* Primary actions, focus, the current turn */
   --color-highlight: #e0a84a;
   --color-highlight-hover: #f3c46b;
   --color-on-highlight: #1b130b;
   --color-error: #a3342b;
-  --color-error-hover: #b9443a;
   --color-on-error: #f7e9e4;
   /* Error text on dark backgrounds (the button crimson is too dark to read) */
   --color-error-text: #e0675c;
@@ -23,8 +21,40 @@
   --color-warning: #d9822b;
   --color-on-warning: #1b130b;
   --color-current-turn: #33281b;
-  --shadow-current-turn: 0 0 0 1px rgba(224, 168, 74, 0.5), 0 0 22px rgba(232, 140, 50, 0.4);
+  --shadow-current-turn: 0 0 0 1px rgba(224, 168, 74, 0.5);
   /* Row edges: players vs NPCs */
   --color-pc: #b08a46;
   --color-npc: #d0503f;
+  /* Small decorative marks (banner stars, divider rules) */
+  --color-ornament: #8a6a3a;
+
+  /*
+   * Surfaces: carved stone lit from above. Like the colours, these are per-theme.
+   */
+  --bg-texture: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .55 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.35'/%3E%3C/svg%3E");
+  --card-bg: linear-gradient(#2c241d, #1c1713);
+  --card-shadow: inset 0 1px 0 rgba(255, 220, 160, 0.08), inset 0 -8px 20px rgba(0, 0, 0, 0.4),
+    0 6px 18px rgba(0, 0, 0, 0.5);
+  --row-bg: linear-gradient(#27211b, #1d1814);
+  --row-shadow: inset 0 1px 0 rgba(255, 220, 160, 0.05), 0 3px 8px rgba(0, 0, 0, 0.45);
+  --row-current-bg: linear-gradient(#3a2d1e, #261d14);
+  /* The torch glow on the current turn (flickers; see .player-row.current-turn::after). */
+  --glow-current-turn: 0 0 22px rgba(232, 140, 50, 0.45), inset 0 0 24px rgba(232, 140, 50, 0.12);
+  --text-glow: 0 0 18px rgba(240, 150, 60, 0.55);
+  --btn-bg: linear-gradient(#332a21, #231d17);
+  --btn-bg-hover: linear-gradient(#3e3328, #2a231c);
+  --btn-border: #5a4630;
+  --btn-primary-bg: linear-gradient(#f3c46b, #c98a32);
+  --btn-primary-bg-hover: linear-gradient(#f7d184, #d89a40);
+  --btn-primary-border: #f0c070;
+  --btn-primary-glow: 0 0 14px rgba(240, 160, 70, 0.35);
+  --btn-danger-bg: linear-gradient(#5a1f1a, #3c1411);
+  --btn-danger-bg-hover: linear-gradient(#6c2620, #481813);
+  --btn-danger-border: #7a2a22;
+  /* The d20 initiative badge */
+  --d20-fill: rgba(0, 0, 0, 0.35);
+  --d20-stroke: #c99a52;
+  --radius-sm: 0.1875rem;
+  --radius-md: 0.3125rem;
+  --radius-lg: 0.4375rem;
 }

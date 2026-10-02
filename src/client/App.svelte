@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { createSessionState } from "./hooks/useSession.svelte";
+  import { createSessionState, storedTableCode } from "./hooks/useSession.svelte";
+  import { readTableParam, clearTableParam } from "./lib/tableLink";
   import Lobby from "./components/Lobby.svelte";
   import PlayerList from "./components/PlayerList.svelte";
   import TurnIndicator from "./components/TurnIndicator.svelte";
@@ -25,8 +26,22 @@
     recoverAsDm,
     submitInitiative,
     leaveSession,
+    leaveStoredTable,
     clearError,
   } = createSessionState();
+
+  // A scanned table invite (?table=6326): read once at load, then cleared from the address bar.
+  const invitedTable = acceptInvite(readTableParam(window.location.search));
+  clearTableParam();
+
+  /** An invite to a different table than the one this device is at asks before switching. */
+  function acceptInvite(invite: string | null): string | null {
+    const current = storedTableCode();
+    if (!invite || !current || current === invite) return invite;
+    if (!confirm(`You're still at Table ${current}. Leave it to join Table ${invite}?`)) return null;
+    leaveStoredTable();
+    return invite;
+  }
 
   let currentPlayer = $derived(
     sessionState.players.find((p) => p.id === sessionState.turnState?.currentPlayerId) ?? null
@@ -55,7 +70,13 @@
 {/if}
 
 {#if !sessionState.sessionId}
-  <Lobby {createSession} {joinSession} {recoverAsDm} connectionStatus={sessionState.connectionStatus} />
+  <Lobby
+    {createSession}
+    {joinSession}
+    {recoverAsDm}
+    connectionStatus={sessionState.connectionStatus}
+    {invitedTable}
+  />
 {:else}
   <main class="session-view">
     <div class="table-code">

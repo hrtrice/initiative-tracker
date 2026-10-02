@@ -54,6 +54,8 @@
   --btn-danger-bg: linear-gradient(#7a2a16, #521a0c);
   --btn-danger-bg-hover: linear-gradient(#8f3420, #622010);
   --btn-danger-border: #2e1b0c;
+  --qr-dark: #2a1a0e;
+  --qr-light: #f1e2bf;
   --d20-fill: rgba(255, 240, 200, 0.6);
   --d20-stroke: #6b4a2a;
   --radius-sm: 0.125rem;

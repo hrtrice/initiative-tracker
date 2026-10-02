@@ -165,7 +165,7 @@ export function createSessionState() {
         if (rebinding && SESSION_GONE_CODES.has(msg.payload.code)) {
           rebinding = false;
           leaveSessionState(
-            manualRecover ? msg.payload.message : "That session has ended, or you're no longer in it."
+            manualRecover ? msg.payload.message : "That table has closed, or you're no longer at it."
           );
           manualRecover = false;
         } else {
@@ -173,7 +173,7 @@ export function createSessionState() {
         }
         break;
       case "YOU_WERE_REMOVED":
-        leaveSessionState("The DM removed you from the session.");
+        leaveSessionState("The Dungeon Master removed you from the table.");
         break;
       case "HEARTBEAT":
         break;

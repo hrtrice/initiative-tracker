@@ -18,7 +18,7 @@
 </script>
 
 <div class="initiative-prompt card" role="region" aria-label="Enter your initiative">
-  <h3>New combat! Roll initiative</h3>
+  <h3>Roll for Initiative!</h3>
   <form onsubmit={handleSubmit}>
     <div class="form-group">
       <label for="my-initiative">Your initiative</label>
@@ -31,7 +31,7 @@
         max={MAX_INITIATIVE}
       />
     </div>
-    <button type="submit" class="btn-primary">Submit</button>
+    <button type="submit" class="btn-primary">Take My Place</button>
   </form>
   {#if error}
     <p class="field-error">{error}</p>

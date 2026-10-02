@@ -174,13 +174,13 @@ export class SessionStore {
 
   addPlayer(session: Session, player: Player): void {
     if (session.players.length >= MAX_PLAYERS) {
-      throw new ServerError(ErrorCode.SESSION_FULL, `This session is full (${MAX_PLAYERS} max)`);
+      throw new ServerError(ErrorCode.SESSION_FULL, `This table is full (${MAX_PLAYERS} max)`);
     }
     player.name = validateName(player.name);
     player.initiative = validateInitiative(player.initiative);
     const nameLower = player.name.toLowerCase();
     if (session.players.some((p) => p.name.toLowerCase() === nameLower)) {
-      throw new ServerError(ErrorCode.NAME_TAKEN, `"${player.name}" is already in this session`);
+      throw new ServerError(ErrorCode.NAME_TAKEN, `"${player.name}" is already at this table`);
     }
     insertByInitiative(session.players, player);
     this.touch(session);
@@ -206,7 +206,7 @@ export class SessionStore {
   removePlayer(session: Session, playerId: string): Player {
     const idx = session.players.findIndex((p) => p.id === playerId);
     if (idx === -1) {
-      throw new ServerError(ErrorCode.PLAYER_NOT_FOUND, "That player is no longer in the session");
+      throw new ServerError(ErrorCode.PLAYER_NOT_FOUND, "That player is no longer at the table");
     }
     const [removed] = session.players.splice(idx, 1);
     if (removed!.clientId) this.bindings.delete(removed!.clientId);
@@ -231,7 +231,7 @@ export class SessionStore {
     const value = validateInitiative(initiative);
     const idx = session.players.findIndex((p) => p.id === playerId);
     if (idx === -1) {
-      throw new ServerError(ErrorCode.PLAYER_NOT_FOUND, "That player is no longer in the session");
+      throw new ServerError(ErrorCode.PLAYER_NOT_FOUND, "That player is no longer at the table");
     }
     const [player] = session.players.splice(idx, 1);
     player!.initiative = value;
@@ -243,7 +243,7 @@ export class SessionStore {
   submitInitiative(session: Session, playerId: string, initiative: unknown): void {
     const player = session.players.find((p) => p.id === playerId);
     if (!player) {
-      throw new ServerError(ErrorCode.PLAYER_NOT_FOUND, "You're no longer in this session");
+      throw new ServerError(ErrorCode.PLAYER_NOT_FOUND, "You're no longer at this table");
     }
     if (player.initiative !== null) {
       throw new ServerError(
@@ -317,7 +317,7 @@ export class SessionStore {
     if (session.customFields.length >= MAX_CUSTOM_FIELDS) {
       throw new ServerError(
         ErrorCode.INVALID_FIELD,
-        `A session can have at most ${MAX_CUSTOM_FIELDS} custom fields`
+        `A table can have at most ${MAX_CUSTOM_FIELDS} custom fields`
       );
     }
     const field: CustomField = {
@@ -366,7 +366,7 @@ export class SessionStore {
     const field = this.findField(session, fieldId);
     const player = session.players.find((p) => p.id === playerId);
     if (!player) {
-      throw new ServerError(ErrorCode.PLAYER_NOT_FOUND, "That player is no longer in the session");
+      throw new ServerError(ErrorCode.PLAYER_NOT_FOUND, "That player is no longer at the table");
     }
     const value = validateFieldValue(field, raw);
     if (value === null) delete player.fields[fieldId];

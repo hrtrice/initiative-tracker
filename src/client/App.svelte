@@ -37,10 +37,12 @@
       sessionState.players.some((p) => p.id === sessionState.playerId && p.initiative === null)
   );
 
+  let myName = $derived(sessionState.players.find((p) => p.id === sessionState.playerId)?.name ?? "");
+
   function confirmLeave() {
     const message = sessionState.isDM
-      ? "Leave this session? It keeps running, and you can rejoin with the room code and Admin Key."
-      : "Leave this session? You'll be removed from the initiative order.";
+      ? "Leave the table? The game keeps running, and you can return with the table number and your Master Key."
+      : "Leave the table? You'll be struck from the order of battle.";
     if (confirm(message)) leaveSession();
   }
 </script>
@@ -56,6 +58,11 @@
   <Lobby {createSession} {joinSession} {recoverAsDm} connectionStatus={sessionState.connectionStatus} />
 {:else}
   <main class="session-view">
+    <div class="table-code">
+      <span>Table <b>{sessionState.roomCode}</b></span>
+      <span>{sessionState.isDM ? "Dungeon Master" : myName}</span>
+    </div>
+
     <TurnIndicator
       {currentPlayer}
       round={sessionState.turnState?.round ?? 1}
@@ -67,6 +74,8 @@
     {#if needsInitiative}
       <InitiativePrompt onsubmit={submitInitiative} />
     {/if}
+
+    <h2 class="section-title">Order of Battle</h2>
 
     <PlayerList
       players={sessionState.players}
@@ -100,7 +109,7 @@
     {/if}
 
     <div class="leave-row">
-      <button class="btn-ghost" onclick={confirmLeave}>Leave session</button>
+      <button class="btn-ghost" onclick={confirmLeave}>Leave the Table</button>
     </div>
   </main>
 {/if}

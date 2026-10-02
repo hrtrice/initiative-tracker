@@ -73,7 +73,7 @@
 
 {#if players.length === 0}
   <p class="empty-state">
-    {isDM ? "No one yet. Share the room code, or add NPCs below." : "Waiting for players to join..."}
+    {isDM ? "No one has joined yet. Share your table number, or summon foes below." : "The party gathers…"}
   </p>
 {:else}
   <ul class="player-list">

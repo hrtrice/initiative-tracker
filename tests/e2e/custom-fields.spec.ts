@@ -63,7 +63,7 @@ test("DM manages custom fields; players fill in their own; NPC values stay secre
   await expect(chips(gimli, "Aragorn")).toHaveText(["Armor Class 16", "Notes ranger"]);
 
   // Fields and players' values survive a new combat; NPCs (and their values) don't.
-  await dm.getByRole("button", { name: "New combat" }).click();
+  await dm.getByRole("button", { name: "New Encounter" }).click();
   await expect(row(dm, "Goblin")).toHaveCount(0);
   await expect(chips(dm, "Aragorn")).toHaveText(["Armor Class 16", "Notes ranger"]);
 

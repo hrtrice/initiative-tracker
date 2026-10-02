@@ -43,7 +43,7 @@
 
   function confirmNewCombat() {
     if (
-      confirm("Start a new combat? NPCs are removed and players re-enter their initiative.")
+      confirm("Begin a new encounter? Foes are cleared and heroes roll initiative again.")
     ) {
       onResetSession?.();
     }
@@ -53,13 +53,13 @@
     const name = npcName.trim();
     const init = Number(npcInitiative);
     if (!name || isNaN(init)) {
-      npcFeedback = "Enter a name and initiative";
+      npcFeedback = "Name the foe and give its initiative";
       return;
     }
     onAddNpc?.(name, init);
     npcName = "";
     npcInitiative = "";
-    npcFeedback = "NPC added!";
+    npcFeedback = `${name} joins the fray!`;
     setTimeout(() => {
       npcFeedback = "";
     }, 1500);
@@ -71,7 +71,7 @@
     <button
       type="button"
       class="room-code"
-      onclick={() => copyToClipboard(roomCode ?? "", "Room code")}
+      onclick={() => copyToClipboard(roomCode ?? "", "Table number")}
       title="Tap to copy"
     >
       {roomCode ?? "----"}
@@ -80,20 +80,20 @@
     <button
       type="button"
       class="admin-key"
-      onclick={() => copyToClipboard(dmToken ?? "", "Admin Key")}
+      onclick={() => copyToClipboard(dmToken ?? "", "Master Key")}
       title="Tap to copy"
     >
-      Admin Key: {maskedKey} (tap to copy)
+      Master Key: {maskedKey} (tap to copy)
     </button>
-    <p class="admin-key-hint">Keep this to rejoin as DM from another device.</p>
+    <p class="admin-key-hint">Keep your Master Key to return as DM from another device.</p>
 
     <div class="add-npc-section">
-      <h3>Add NPC</h3>
+      <h3>Summon a Foe</h3>
       <div class="npc-form">
         <input
           type="text"
           bind:value={npcName}
-          placeholder="NPC name"
+          placeholder="Foe's name"
           maxlength={MAX_NAME_LENGTH}
         />
         <input
@@ -103,7 +103,7 @@
           min={MIN_INITIATIVE}
           max={MAX_INITIATIVE}
         />
-        <button class="btn-primary" onclick={handleAddNpc}>Add</button>
+        <button class="btn-primary" onclick={handleAddNpc}>Summon</button>
       </div>
       {#if npcFeedback}
         <p class="npc-feedback">{npcFeedback}</p>
@@ -111,9 +111,9 @@
     </div>
 
     <div class="actions">
-      <button class="btn-secondary" onclick={onPreviousTurn}>&#9664; Previous</button>
-      <button class="btn-primary" onclick={onAdvanceTurn}>Next &#9654;</button>
-      <button class="btn-danger" onclick={confirmNewCombat}>New combat</button>
+      <button class="btn-secondary" onclick={onPreviousTurn}>&#9664; Turn Back</button>
+      <button class="btn-primary" onclick={onAdvanceTurn}>End Turn &#9654;</button>
+      <button class="btn-danger" onclick={confirmNewCombat}>New Encounter</button>
     </div>
   </div>
 {/if}

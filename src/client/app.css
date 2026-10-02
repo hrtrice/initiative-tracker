@@ -43,7 +43,9 @@
   --radius-md: 0.625rem;
   --radius-lg: 1rem;
 
-  --font-body: system-ui, -apple-system, sans-serif;
+  /* Bundled via @fontsource (see main.ts); the fallbacks keep the serif feel if they fail. */
+  --font-display: "Cinzel", "Trajan Pro", Georgia, serif;
+  --font-body: "Alegreya", Georgia, "Times New Roman", serif;
   --font-mono: "Courier New", Courier, monospace;
 
   --touch-target: 2.75rem;
@@ -53,11 +55,14 @@
 }
 
 html {
-  font-size: 16px;
+  /* Alegreya runs small for its size; a touch larger keeps body text as readable as before. */
+  font-size: 17px;
 }
 
 body {
   font-family: var(--font-body);
+  /* Alegreya defaults to old-style figures, which make AC and initiative values look uneven. */
+  font-variant-numeric: lining-nums;
   background-color: var(--color-bg);
   background-image: var(--bg-image);
   background-attachment: fixed;
@@ -75,15 +80,32 @@ textarea {
   color: inherit;
 }
 
+/* Some inputs sit inside a <label>; keep typed text in the plain body face, not the label style. */
+input,
+select,
+textarea {
+  font-family: var(--font-body);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
 #app {
   max-width: 48rem;
   margin: 0 auto;
   padding: 1rem;
 }
 
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  letter-spacing: 0.02em;
+}
+
 h1 {
   font-size: 1.5rem;
-  font-weight: 700;
+  font-weight: 800;
 }
 
 h2 {
@@ -97,8 +119,10 @@ button {
   border-radius: var(--radius-md);
   padding: 0.75rem 1.25rem;
   min-height: var(--touch-target);
+  font-family: var(--font-display);
   font-weight: 600;
   font-size: 0.875rem;
+  letter-spacing: 0.03em;
   transition: background-color var(--transition-fast), opacity var(--transition-fast);
 }
 
@@ -183,6 +207,7 @@ input::placeholder {
 
 label {
   display: block;
+  font-family: var(--font-display);
   font-size: 0.75rem;
   font-weight: 600;
   text-transform: uppercase;
@@ -277,7 +302,7 @@ label {
 }
 
 .player-row .initiative {
-  font-family: var(--font-mono);
+  font-family: var(--font-display);
   font-size: 1rem;
   font-weight: 700;
   min-width: 2.5rem;
@@ -287,11 +312,13 @@ label {
 
 .player-row .name {
   flex: 1;
-  font-size: 0.875rem;
-  font-weight: 500;
+  font-family: var(--font-display);
+  font-size: 0.9375rem;
+  font-weight: 600;
 }
 
 .player-row .badge {
+  font-family: var(--font-display);
   font-size: 0.625rem;
   font-weight: 700;
   text-transform: uppercase;
@@ -323,8 +350,7 @@ label {
 
 .field-chip {
   white-space: nowrap;
-  font-size: 0.6875rem;
-  font-family: var(--font-mono);
+  font-size: 0.75rem;
   color: var(--color-text-muted);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
@@ -420,13 +446,16 @@ label {
 }
 
 .turn-indicator .player-name {
-  font-size: 1.5rem;
-  font-weight: 700;
+  font-family: var(--font-display);
+  font-size: 1.625rem;
+  font-weight: 800;
   color: var(--color-highlight);
 }
 
 .turn-indicator .round-info {
-  font-size: 0.875rem;
+  font-family: var(--font-display);
+  letter-spacing: 0.15em;
+  font-size: 0.8125rem;
   color: var(--color-text-muted);
   margin-top: 0.25rem;
 }
@@ -461,8 +490,8 @@ label {
 .dm-toolbar .room-code {
   text-align: center;
   font-size: 2rem;
-  font-family: var(--font-mono);
-  font-weight: 700;
+  font-family: var(--font-display);
+  font-weight: 800;
   letter-spacing: 0.2em;
   background-color: var(--color-card);
   padding: 0.75rem;
@@ -491,7 +520,7 @@ label {
 .initiative-edit {
   width: 3.5rem;
   text-align: center;
-  font-family: var(--font-mono);
+  font-family: var(--font-display);
 }
 
 .player-row .initiative-btn {

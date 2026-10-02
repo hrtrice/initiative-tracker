@@ -708,6 +708,163 @@ label {
 
 .initiative-prompt {
   margin-bottom: 1rem;
+  border-color: var(--color-highlight);
+  box-shadow: var(--card-shadow), var(--glow-current-turn);
+}
+
+.initiative-prompt h3 {
+  text-align: center;
+  font-size: 1.375rem;
+  color: var(--color-highlight-hover);
+  text-shadow: var(--text-glow);
+  margin-bottom: 0.5rem;
+}
+
+/* ---- The d20 roller ---- */
+
+.roller {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0.5rem 0 1rem;
+}
+
+.roller.big {
+  justify-items: center;
+  text-align: center;
+}
+
+.roller:not(.big) {
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  column-gap: 0.75rem;
+}
+
+.roller:not(.big) .roller-controls {
+  grid-column: 1 / -1;
+}
+
+.roller-result {
+  font-size: 0.9375rem;
+  color: var(--color-text-muted);
+  min-height: 1.5em;
+}
+
+.roller-result b {
+  color: var(--color-text);
+}
+
+.roller-result .roller-total {
+  color: var(--color-highlight-hover);
+  font-family: var(--font-display);
+  font-size: 1.125em;
+}
+
+.crit-note {
+  display: block;
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--color-highlight-hover);
+  text-shadow: var(--text-glow);
+}
+
+.crit-note.fail {
+  color: var(--color-error-text);
+  text-shadow: none;
+}
+
+.roller-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.bonus-stepper {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.bonus-label {
+  font-family: var(--font-display);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  margin-right: 0.125rem;
+}
+
+.bonus-stepper .btn-icon {
+  font-size: 1.125rem;
+  width: 2.5rem;
+}
+
+.bonus-value {
+  min-width: 2.75rem;
+  text-align: center;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 1.125rem;
+  color: var(--color-text);
+}
+
+.roll-button {
+  flex: 1;
+  min-width: 9rem;
+}
+
+.d20.big {
+  width: 8rem;
+  height: 8rem;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 2.75rem;
+  color: var(--color-highlight-hover);
+}
+
+.d20.big .d20-value {
+  padding-top: 0.5rem;
+}
+
+.roller:not(.big) .d20 {
+  font-family: var(--font-display);
+  font-weight: 800;
+  color: var(--color-highlight-hover);
+}
+
+.d20.tumbling svg {
+  animation: d20-tumble 0.35s linear infinite;
+}
+
+@keyframes d20-tumble {
+  from { transform: rotate(0deg) scale(0.92); }
+  50% { transform: rotate(180deg) scale(1.04); }
+  to { transform: rotate(360deg) scale(0.92); }
+}
+
+.d20.crit-success svg {
+  filter: drop-shadow(0 0 10px var(--color-highlight));
+}
+
+.d20.crit-success .face {
+  stroke: var(--color-highlight-hover);
+}
+
+.d20.crit-fail .face {
+  stroke: var(--color-npc);
+}
+
+.d20.crit-fail {
+  color: var(--color-error-text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .d20.tumbling svg {
+    animation: none;
+  }
 }
 
 .initiative-prompt form {
@@ -716,8 +873,9 @@ label {
   align-items: flex-end;
 }
 
-.initiative-prompt input {
+.initiative-prompt .form-group {
   flex: 1;
+  margin-bottom: 0;
 }
 
 .recover-section summary {

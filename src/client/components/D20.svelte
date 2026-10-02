@@ -2,10 +2,27 @@
   import type { Snippet } from "svelte";
 
   /** A d20 outline with the value inside it; the shape is decoration, the value is the content. */
-  let { children }: { children: Snippet } = $props();
+  let {
+    children,
+    big = false,
+    tumbling = false,
+    crit = null,
+  }: {
+    children: Snippet;
+    big?: boolean;
+    tumbling?: boolean;
+    /** Natural 20 or natural 1: the die lights up gold or red. */
+    crit?: "success" | "fail" | null;
+  } = $props();
 </script>
 
-<span class="d20">
+<span
+  class="d20"
+  class:big
+  class:tumbling
+  class:crit-success={crit === "success"}
+  class:crit-fail={crit === "fail"}
+>
   <svg viewBox="0 0 100 100" aria-hidden="true" focusable="false">
     <polygon
       class="face"

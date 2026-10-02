@@ -1,5 +1,6 @@
 <script lang="ts">
   import { MAX_NAME_LENGTH, MIN_INITIATIVE, MAX_INITIATIVE } from "../lib/types";
+  import TableQr from "./TableQr.svelte";
 
   let {
     isDM = false,
@@ -76,6 +77,9 @@
     >
       {roomCode ?? "----"}
     </button>
+    {#if roomCode}
+      <TableQr {roomCode} />
+    {/if}
 
     <button
       type="button"

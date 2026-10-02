@@ -52,6 +52,8 @@
   --btn-danger-bg-hover: linear-gradient(#6c2620, #481813);
   --btn-danger-border: #7a2a22;
   /* The d20 initiative badge */
+  --qr-dark: #1b130b;
+  --qr-light: #efe3c8;
   --d20-fill: rgba(0, 0, 0, 0.35);
   --d20-stroke: #c99a52;
   --radius-sm: 0.1875rem;

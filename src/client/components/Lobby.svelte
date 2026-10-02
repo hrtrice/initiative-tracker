@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount, untrack } from "svelte";
   import { ROOM_CODE_LENGTH } from "../lib/types";
   import type { ConnectionStatus } from "../lib/wsClient";
   import PlayerEntry from "./PlayerEntry.svelte";
@@ -8,11 +9,14 @@
     joinSession,
     recoverAsDm,
     connectionStatus,
+    invitedTable = null,
   }: {
     createSession: () => void;
     joinSession: (roomCode: string, characterName: string, initiative: number) => void;
     recoverAsDm: (roomCode: string, dmToken: string) => void;
     connectionStatus: ConnectionStatus;
+    /** From a scanned invite: fills in the table number so the player only adds their hero. */
+    invitedTable?: string | null;
   } = $props();
 
   let recoverCode = $state("");
@@ -29,7 +33,11 @@
     recoverAsDm(recoverCode, recoverKey);
   }
 
-  let roomCode = $state("");
+  let roomCode = $state(untrack(() => invitedTable ?? ""));
+
+  onMount(() => {
+    if (invitedTable) document.getElementById("name")?.focus();
+  });
   let roomCodeError = $state("");
 
   function handleJoin(data: { name: string; initiative: number }) {
@@ -62,6 +70,9 @@
   <hr class="divider" />
 
   <div class="join-section card">
+    {#if invitedTable}
+      <p class="invite-note">You've been summoned to <b>Table {invitedTable}</b>. Name your hero and roll!</p>
+    {/if}
     <div class="form-group">
       <label for="roomCode">Table Number</label>
       <input

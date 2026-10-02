@@ -62,6 +62,9 @@
   --btn-danger-bg: linear-gradient(#5a1f1a, #3c1411);
   --btn-danger-bg-hover: linear-gradient(#6c2620, #481813);
   --btn-danger-border: #7a2a22;
+  /* The QR invite: always dark on light, which every scanner reads */
+  --qr-dark: #1b130b;
+  --qr-light: #efe3c8;
   /* The d20 initiative badge */
   --d20-fill: rgba(0, 0, 0, 0.35);
   --d20-stroke: #c99a52;
@@ -633,6 +636,96 @@ label {
   user-select: all;
 }
 
+/* ---- Table QR invite ---- */
+
+.show-qr {
+  margin-top: -0.5rem;
+}
+
+.table-qr {
+  margin: auto;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--color-text);
+  width: min(26rem, calc(100vw - 2rem));
+  max-height: calc(100dvh - 2rem);
+}
+
+.table-qr::backdrop {
+  background: rgba(0, 0, 0, 0.75);
+}
+
+.table-qr-card {
+  display: grid;
+  gap: 0.75rem;
+  justify-items: center;
+  text-align: center;
+  padding: 1.25rem;
+  background-color: var(--color-card);
+  background-image: var(--card-bg);
+  border: 1px solid var(--color-highlight);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--card-shadow), var(--glow-current-turn);
+}
+
+.table-qr-card h2 {
+  color: var(--color-highlight-hover);
+  text-shadow: var(--text-glow);
+}
+
+/* A parchment plate with a gold rim, so the code reads as part of the table. */
+.qr-code {
+  width: 100%;
+  max-width: 18rem;
+  aspect-ratio: 1;
+  border: 3px solid var(--color-highlight);
+  border-radius: var(--radius-md);
+  box-shadow: 0 0 18px rgba(232, 140, 50, 0.35);
+}
+
+.qr-light {
+  fill: var(--qr-light);
+}
+
+.qr-dark {
+  fill: var(--qr-dark);
+}
+
+.table-qr-number {
+  font-family: var(--font-display);
+  font-size: 1.125rem;
+  color: var(--color-text-muted);
+}
+
+.table-qr-number b {
+  font-size: 1.75rem;
+  letter-spacing: 0.2em;
+  color: var(--color-highlight-hover);
+}
+
+.table-qr-link {
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.table-qr-actions {
+  display: flex;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.table-qr-actions button {
+  flex: 1;
+}
+
+.table-qr-feedback {
+  min-height: 1.25em;
+  font-size: 0.8125rem;
+  color: var(--color-success);
+}
+
 .dm-toolbar .admin-key {
   text-align: center;
   font-size: 0.75rem;
@@ -978,6 +1071,18 @@ label {
   font-size: 0.75rem;
   line-height: 1;
   color: var(--color-ornament);
+}
+
+.invite-note {
+  margin-bottom: 1rem;
+  text-align: center;
+  color: var(--color-text-muted);
+}
+
+.invite-note b {
+  font-family: var(--font-display);
+  color: var(--color-highlight-hover);
+  letter-spacing: 0.05em;
 }
 
 .lobby .join-section {

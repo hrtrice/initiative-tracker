@@ -52,6 +52,11 @@ function clearCredentials(): void {
   }
 }
 
+/** The table this device would rejoin on load, if any. */
+export function storedTableCode(): string | null {
+  return loadCredentials()?.roomCode ?? null;
+}
+
 /** Errors in reply to a rebind that mean the stored session is gone for good. */
 const SESSION_GONE_CODES = new Set<ErrorCode>([
   ErrorCode.SESSION_NOT_FOUND,
@@ -87,6 +92,8 @@ export function createSessionState() {
   let rebinding = false;
   /** The rebind was the DM typing in an Admin Key, so show the server's reason on failure. */
   let manualRecover = false;
+  /** Leave as soon as the stored table is rejoined (the player scanned another table's invite). */
+  let leaveAfterRebind = false;
 
   function leaveSessionState(error: string | null) {
     clearCredentials();
@@ -147,6 +154,10 @@ export function createSessionState() {
         state.players = msg.payload.players;
         state.turnState = msg.payload.turnState;
         state.customFields = msg.payload.customFields;
+        if (leaveAfterRebind) {
+          leaveAfterRebind = false;
+          leaveSession();
+        }
         break;
       }
       case "PLAYER_JOINED":
@@ -164,6 +175,7 @@ export function createSessionState() {
       case "ERROR":
         if (rebinding && SESSION_GONE_CODES.has(msg.payload.code)) {
           rebinding = false;
+          leaveAfterRebind = false;
           leaveSessionState(
             manualRecover ? msg.payload.message : "That table has closed, or you're no longer at it."
           );
@@ -219,6 +231,12 @@ export function createSessionState() {
 
   if (loadCredentials()) wsClient.connect();
 
+  /** Leaving needs the server to know who we are, so it goes out right after rejoining. */
+  function leaveSession() {
+    wsClient.send({ type: "LEAVE_SESSION", payload: {} });
+    leaveSessionState(null);
+  }
+
   function dmCommand<T extends DmCommand["type"]>(type: T, payload: DmCommandPayload<T>) {
     if (!state.dmToken) return;
     wsClient.send({ type, payload: { ...payload, dmToken: state.dmToken } } as ClientMessage);
@@ -268,9 +286,11 @@ export function createSessionState() {
     submitInitiative: (initiative: number) => {
       wsClient.send({ type: "SUBMIT_INITIATIVE", payload: { initiative } });
     },
-    leaveSession: () => {
-      wsClient.send({ type: "LEAVE_SESSION", payload: {} });
-      leaveSessionState(null);
+    leaveSession,
+    /** Leave the stored table to take up an invite to a different one. */
+    leaveStoredTable: () => {
+      if (state.sessionId) leaveSession();
+      else leaveAfterRebind = true;
     },
     clearError: () => {
       state.error = null;

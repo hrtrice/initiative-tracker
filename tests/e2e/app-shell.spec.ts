@@ -7,7 +7,7 @@ test("the page loads with no failed requests and installable icons", async ({ pa
   });
   page.on("requestfailed", (r) => failures.push(`failed ${r.url()}`));
   await page.goto("/");
-  await expect(page.getByRole("button", { name: "Create New Session" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Begin an Encounter" })).toBeVisible();
   await page.waitForLoadState("networkidle");
   expect(failures).toEqual([]);
 

@@ -38,7 +38,7 @@ export { expect };
 
 export async function createSession(dm: Page): Promise<string> {
   await dm.goto("/");
-  await dm.getByRole("button", { name: "Create New Session" }).click();
+  await dm.getByRole("button", { name: "Begin an Encounter" }).click();
   const roomCode = dm.locator(".room-code");
   await expect(roomCode).toHaveText(/^\d{4}$/);
   return (await roomCode.innerText()).trim();
@@ -48,7 +48,7 @@ export async function fillJoinForm(page: Page, roomCode: string, name: string, i
   await page.locator("#roomCode").fill(roomCode);
   await page.locator("#name").fill(name);
   await page.locator("#initiative").fill(String(initiative));
-  await page.getByRole("button", { name: "Join", exact: true }).click();
+  await page.getByRole("button", { name: "Join the Party", exact: true }).click();
 }
 
 export async function joinSession(page: Page, roomCode: string, name: string, initiative: number) {
@@ -58,9 +58,9 @@ export async function joinSession(page: Page, roomCode: string, name: string, in
 }
 
 export async function addNpc(dm: Page, name: string, initiative: number) {
-  await dm.getByPlaceholder("NPC name").fill(name);
+  await dm.getByPlaceholder("Foe's name").fill(name);
   await dm.getByPlaceholder("Init").fill(String(initiative));
-  await dm.getByRole("button", { name: "Add", exact: true }).click();
+  await dm.getByRole("button", { name: "Summon", exact: true }).click();
 }
 
 /** The initiative list as "initiative name" strings, top to bottom, without badges. */
@@ -80,7 +80,7 @@ export async function expectRows(page: Page, expected: string[]) {
 
 export const turnBanner = (page: Page) => page.locator(".turn-indicator");
 export const errorBanner = (page: Page) => page.locator(".error-banner");
-export const lobby = (page: Page) => page.getByRole("button", { name: "Create New Session" });
+export const lobby = (page: Page) => page.getByRole("button", { name: "Begin an Encounter" });
 
 /**
  * A TCP proxy in front of the server whose connections can be cut, to simulate a

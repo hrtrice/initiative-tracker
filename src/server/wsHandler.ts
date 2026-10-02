@@ -166,7 +166,7 @@ export class WsHandler {
       (p) => p.playerToken !== null && p.playerToken === payload.playerToken
     );
     if (!player) {
-      throw new ServerError(ErrorCode.PLAYER_NOT_FOUND, "You're no longer in that session");
+      throw new ServerError(ErrorCode.PLAYER_NOT_FOUND, "You're no longer at that table");
     }
     this.store.bindClient(client.id, session, player.id);
     this.sendStateSync(client.id, session, player.id);
@@ -178,7 +178,7 @@ export class WsHandler {
   ): void {
     const session = this.findSession(payload.roomCode);
     if (session.dmToken !== payload.dmToken) {
-      throw new ServerError(ErrorCode.UNAUTHORIZED, "That Admin Key doesn't match this session");
+      throw new ServerError(ErrorCode.UNAUTHORIZED, "That Master Key doesn't match this table");
     }
     this.store.bindClient(client.id, session, null);
     this.sendStateSync(client.id, session, null);
@@ -291,7 +291,7 @@ export class WsHandler {
     const session =
       typeof roomCode === "string" ? this.store.findByCode(roomCode.trim().toUpperCase()) : undefined;
     if (!session) {
-      throw new ServerError(ErrorCode.SESSION_NOT_FOUND, "No session with that room code");
+      throw new ServerError(ErrorCode.SESSION_NOT_FOUND, "No table with that number");
     }
     return session;
   }
@@ -301,7 +301,7 @@ export class WsHandler {
     const binding = this.store.getBinding(client.id);
     const session = binding ? this.store.findById(binding.sessionId) : undefined;
     if (!binding || !session) {
-      throw new ServerError(ErrorCode.UNAUTHORIZED, "You're not connected to a session");
+      throw new ServerError(ErrorCode.UNAUTHORIZED, "You're not seated at a table");
     }
     if (binding.playerId !== null || session.dmToken !== dmToken) {
       throw new ServerError(ErrorCode.UNAUTHORIZED, "Only the DM can do that");
@@ -313,7 +313,7 @@ export class WsHandler {
     const binding = this.store.getBinding(client.id);
     const session = binding ? this.store.findById(binding.sessionId) : undefined;
     if (!binding || !session || binding.playerId === null) {
-      throw new ServerError(ErrorCode.UNAUTHORIZED, "You're not a player in a session");
+      throw new ServerError(ErrorCode.UNAUTHORIZED, "You're not a player at a table");
     }
     return { session, playerId: binding.playerId };
   }

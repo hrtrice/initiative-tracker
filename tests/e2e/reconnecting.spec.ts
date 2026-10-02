@@ -58,8 +58,8 @@ test("a dropped connection reconnects and keeps receiving updates", async ({ new
     await expect(dm.locator(".reconnect-banner")).toBeHidden({ timeout: 10_000 });
     await expect(player.locator(".reconnect-banner")).toBeHidden({ timeout: 10_000 });
 
-    await dm.getByRole("button", { name: /Next/ }).click();
-    await expect(turnBanner(player)).toContainText("Your turn!");
+    await dm.getByRole("button", { name: /End Turn/ }).click();
+    await expect(turnBanner(player)).toContainText("Your move, adventurer!");
     await expect(dm.locator(".error-banner")).toHaveCount(0);
   } finally {
     await proxy.close();

@@ -41,12 +41,12 @@
 
 <form onsubmit={handleSubmit}>
   <div class="form-group">
-    <label for="name">Character Name</label>
+    <label for="name">Your Hero</label>
     <input
       id="name"
       type="text"
       bind:value={name}
-      placeholder="Enter character name"
+      placeholder="e.g. Aragorn"
       maxlength={MAX_NAME_LENGTH}
       required
     />
@@ -56,7 +56,7 @@
   </div>
 
   <div class="form-group">
-    <label for="initiative">Initiative</label>
+    <label for="initiative">Initiative Roll</label>
     <input
       id="initiative"
       type="number"
@@ -73,7 +73,7 @@
 
   <div class="submit-row">
     <button type="submit" class="btn-primary">
-      Join
+      Join the Party
     </button>
   </div>
 </form>

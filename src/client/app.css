@@ -496,6 +496,13 @@ label {
   color: var(--color-text-muted);
 }
 
+/* A downed foe is struck through: out of the fight. (Heroes at 0 are only unconscious.) */
+.player-row.npc:has(.health.down) .name {
+  text-decoration: line-through;
+  text-decoration-color: var(--health-down-text);
+  text-decoration-thickness: 2px;
+}
+
 .health-editor {
   display: grid;
   gap: 0.625rem;

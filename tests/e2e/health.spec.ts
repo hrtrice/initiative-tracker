@@ -40,8 +40,11 @@ test("the DM tracks a foe's HP and chooses what players see of it", async ({ new
   await dm.getByLabel("What players see of Goblin's health").selectOption("hidden");
   await expect(row(player, "Goblin").locator(".health")).toHaveCount(0);
 
+  await expect(row(dm, "Goblin").locator(".name")).toHaveCSS("text-decoration-line", "none");
   await hit(dm, "Goblin", "Damage", 20);
   await expect(healthOf(dm, "Goblin")).toHaveAccessibleName("Health: 0 of 13 HP, Down");
+  // A downed foe is struck through.
+  await expect(row(dm, "Goblin").locator(".name")).toHaveCSS("text-decoration-line", "line-through");
 });
 
 test("players track their own HP, everyone sees it, and the DM can switch health off", async ({
@@ -62,6 +65,10 @@ test("players track their own HP, everyone sees it, and the DM can switch health
     "Health: 12 of 30 HP, plus 5 temporary, Bloodied"
   );
   await expect(row(dm, "Aragorn")).toContainText("12/30");
+  // Heroes at 0 HP aren't struck through: only foes are out of the fight.
+  await hit(player, "Aragorn", "Damage", 40);
+  await expect(healthOf(dm, "Aragorn")).toHaveAccessibleName("Health: 0 of 30 HP, Down");
+  await expect(row(dm, "Aragorn").locator(".name")).toHaveCSS("text-decoration-line", "none");
 
   await dm.getByLabel("Show health to players").uncheck();
   await expect(row(player, "Aragorn").locator(".health")).toHaveCount(0);

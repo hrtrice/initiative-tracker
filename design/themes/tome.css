@@ -48,6 +48,12 @@
   --btn-danger-border: #7d1a17;
   --qr-dark: #2b1d12;
   --qr-light: #f6ecd3;
+  --health-good: #3f6b2a;
+  --health-bloodied: #94521a;
+  --health-down: #8f1d1d;
+  --health-down-text: #8f1d1d;
+  --health-temp: #2f5d7c;
+  --health-track: rgba(91, 59, 34, 0.18);
   --d20-fill: rgba(255, 250, 235, 0.4);
   --d20-stroke: #5b3b22;
   --radius-sm: 0.125rem;

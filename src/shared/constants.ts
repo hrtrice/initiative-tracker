@@ -11,6 +11,9 @@ export const MAX_FIELD_NAME_LENGTH = 20;
 export const MAX_FIELD_TEXT_LENGTH = 40;
 export const MIN_FIELD_NUMBER = -999;
 export const MAX_FIELD_NUMBER = 999;
+export const MAX_HP = 999;
+/** Largest single damage, healing or temp HP amount. */
+export const MAX_HP_CHANGE = 999;
 /** Offered to the DM as one-tap suggestions when adding custom fields. */
 export const SUGGESTED_FIELDS: ReadonlyArray<{ name: string; type: "number" | "text" }> = [
   { name: "AC", type: "number" },
@@ -36,6 +39,8 @@ export enum ErrorCode {
   INVALID_REORDER = "INVALID_REORDER",
   INVALID_FIELD = "INVALID_FIELD",
   FIELD_NOT_FOUND = "FIELD_NOT_FOUND",
+  INVALID_HEALTH = "INVALID_HEALTH",
+  HEALTH_DISABLED = "HEALTH_DISABLED",
 }
 
 export type SessionStatus = "WAITING" | "ACTIVE" | "COMPLETED";

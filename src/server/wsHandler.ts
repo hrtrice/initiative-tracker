@@ -3,6 +3,7 @@ import type { IncomingMessage } from "http";
 import crypto from "crypto";
 import { SessionStore, snapshot, validateInitiative, validateName } from "./sessionStore";
 import { ServerError } from "./errors";
+import { validateOptionalMaxHp } from "./health";
 import type { ClientMessage, ClientMessageMap, ServerMessage } from "../shared/messages";
 import { ErrorCode, WS_CLOSE_REMOVED } from "../shared/constants";
 import type { Player, Session } from "../shared/types";
@@ -16,7 +17,8 @@ type SnapshotMessageType =
   | "TURN_ADVANCED"
   | "TURN_REGRESSED"
   | "SESSION_RESET"
-  | "FIELDS_UPDATED";
+  | "FIELDS_UPDATED"
+  | "HEALTH_UPDATED";
 
 export interface WsClient {
   ws: WebSocket;
@@ -105,6 +107,14 @@ export class WsHandler {
           return this.handleSetFieldValue(client, msg.payload);
         case "SET_MY_FIELD":
           return this.handleSetMyField(client, msg.payload);
+        case "SET_HEALTH":
+          return this.handleSetHealth(client, msg.payload);
+        case "SET_MY_HEALTH":
+          return this.handleSetMyHealth(client, msg.payload);
+        case "SET_HEALTH_VISIBILITY":
+          return this.handleSetHealthVisibility(client, msg.payload);
+        case "UPDATE_HEALTH_SETTINGS":
+          return this.handleUpdateHealthSettings(client, msg.payload);
         default:
           this.sendError(client.id, ErrorCode.UNKNOWN_ERROR, "Unknown message type");
       }
@@ -138,6 +148,8 @@ export class WsHandler {
       initiative: validateInitiative(payload.initiative),
       isNpc: false,
       fields: {},
+      health: null,
+      healthVisibility: "both",
       clientId: null,
       playerToken,
       createdAt: Date.now(),
@@ -214,7 +226,12 @@ export class WsHandler {
 
   private handleAddNpc(client: WsClient, payload: ClientMessageMap["ADD_NPC"]): void {
     const session = this.requireDm(client, payload.dmToken);
-    this.store.addNpc(session, validateName(payload.name), validateInitiative(payload.initiative));
+    this.store.addNpc(
+      session,
+      validateName(payload.name),
+      validateInitiative(payload.initiative),
+      validateOptionalMaxHp(payload.maxHp)
+    );
     this.broadcastSnapshot(session, "PLAYER_JOINED");
   }
 
@@ -273,6 +290,40 @@ export class WsHandler {
     const { session, playerId } = this.requirePlayer(client);
     this.store.setFieldValue(session, playerId, payload.fieldId, payload.value);
     this.broadcastSnapshot(session, "FIELDS_UPDATED");
+  }
+
+  private handleSetHealth(client: WsClient, payload: ClientMessageMap["SET_HEALTH"]): void {
+    const session = this.requireDm(client, payload.dmToken);
+    this.store.changeHealth(session, payload.playerId, payload.change);
+    this.broadcastSnapshot(session, "HEALTH_UPDATED");
+  }
+
+  /** Players track their own character's health, but not while the DM has it switched off. */
+  private handleSetMyHealth(client: WsClient, payload: ClientMessageMap["SET_MY_HEALTH"]): void {
+    const { session, playerId } = this.requirePlayer(client);
+    if (!session.healthSettings.enabled) {
+      throw new ServerError(ErrorCode.HEALTH_DISABLED, "The DM has health tracking switched off");
+    }
+    this.store.changeHealth(session, playerId, payload.change);
+    this.broadcastSnapshot(session, "HEALTH_UPDATED");
+  }
+
+  private handleSetHealthVisibility(
+    client: WsClient,
+    payload: ClientMessageMap["SET_HEALTH_VISIBILITY"]
+  ): void {
+    const session = this.requireDm(client, payload.dmToken);
+    this.store.setHealthVisibility(session, payload.playerId, payload.visibility);
+    this.broadcastSnapshot(session, "HEALTH_UPDATED");
+  }
+
+  private handleUpdateHealthSettings(
+    client: WsClient,
+    payload: ClientMessageMap["UPDATE_HEALTH_SETTINGS"]
+  ): void {
+    const session = this.requireDm(client, payload.dmToken);
+    this.store.updateHealthSettings(session, payload);
+    this.broadcastSnapshot(session, "HEALTH_UPDATED");
   }
 
   private handleTurnCommand(

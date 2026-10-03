@@ -1,8 +1,15 @@
 import { WsClient } from "../lib/wsClient";
 import { reloadIfOutdated } from "../lib/updateCheck";
 import type { ConnectionStatus } from "../lib/wsClient";
-import type { CustomFieldType, FieldValue, SessionState } from "../lib/types";
-import type { ClientMessage, ServerMessage } from "@shared/messages";
+import type {
+  CustomFieldType,
+  FieldValue,
+  HealthChange,
+  HealthSettings,
+  HealthVisibility,
+  SessionState,
+} from "../lib/types";
+import type { ClientMessage, ServerMessage, SessionSnapshot } from "@shared/messages";
 import { ErrorCode } from "@shared/constants";
 
 const wsClient = new WsClient();
@@ -80,6 +87,7 @@ export function createSessionState() {
     players: [],
     turnState: null,
     customFields: [],
+    healthSettings: { enabled: true, npcDefault: "bar" } as HealthSettings,
     isDM: false,
     playerId: null,
     playerToken: null,
@@ -109,6 +117,13 @@ export function createSessionState() {
     state.error = error;
   }
 
+  function applySnapshot(snap: SessionSnapshot) {
+    state.players = snap.players;
+    state.turnState = snap.turnState;
+    state.customFields = snap.customFields;
+    state.healthSettings = snap.healthSettings;
+  }
+
   function handleMessage(msg: ServerMessage) {
     switch (msg.type) {
       case "SESSION_CREATED":
@@ -118,9 +133,7 @@ export function createSessionState() {
         state.playerToken = null;
         state.playerId = null;
         state.isDM = true;
-        state.players = msg.payload.players;
-        state.turnState = msg.payload.turnState;
-        state.customFields = msg.payload.customFields;
+        applySnapshot(msg.payload);
         state.error = null;
         saveCredentials({ role: "dm", roomCode: msg.payload.roomCode, dmToken: msg.payload.dmToken });
         break;
@@ -131,9 +144,7 @@ export function createSessionState() {
         state.playerToken = msg.payload.playerToken;
         state.dmToken = null;
         state.isDM = false;
-        state.players = msg.payload.players;
-        state.turnState = msg.payload.turnState;
-        state.customFields = msg.payload.customFields;
+        applySnapshot(msg.payload);
         state.error = null;
         saveCredentials({
           role: "player",
@@ -151,9 +162,7 @@ export function createSessionState() {
         state.playerId = msg.payload.playerId;
         state.dmToken = creds?.role === "dm" ? creds.dmToken : null;
         state.playerToken = creds?.role === "player" ? creds.playerToken : null;
-        state.players = msg.payload.players;
-        state.turnState = msg.payload.turnState;
-        state.customFields = msg.payload.customFields;
+        applySnapshot(msg.payload);
         if (leaveAfterRebind) {
           leaveAfterRebind = false;
           leaveSession();
@@ -168,9 +177,8 @@ export function createSessionState() {
       case "TURN_REGRESSED":
       case "SESSION_RESET":
       case "FIELDS_UPDATED":
-        state.players = msg.payload.players;
-        state.turnState = msg.payload.turnState;
-        state.customFields = msg.payload.customFields;
+      case "HEALTH_UPDATED":
+        applySnapshot(msg.payload);
         break;
       case "ERROR":
         if (rebinding && SESSION_GONE_CODES.has(msg.payload.code)) {
@@ -263,7 +271,8 @@ export function createSessionState() {
     advanceTurn: () => dmCommand("ADVANCE_TURN", {}),
     previousTurn: () => dmCommand("PREVIOUS_TURN", {}),
     resetSession: () => dmCommand("RESET_SESSION", {}),
-    addNpc: (name: string, initiative: number) => dmCommand("ADD_NPC", { name, initiative }),
+    addNpc: (name: string, initiative: number, maxHp: number | null = null) =>
+      dmCommand("ADD_NPC", { name, initiative, maxHp }),
     addField: (name: string, type: CustomFieldType) => dmCommand("ADD_FIELD", { name, type }),
     updateField: (fieldId: string, changes: { name?: string; type?: CustomFieldType }) =>
       dmCommand("UPDATE_FIELD", { fieldId, ...changes }),
@@ -275,6 +284,17 @@ export function createSessionState() {
         wsClient.send({ type: "SET_MY_FIELD", payload: { fieldId, value } });
       }
     },
+    /** DMs can change anyone's health; players only their own. */
+    changeHealth: (playerId: string, change: HealthChange) => {
+      if (state.isDM) dmCommand("SET_HEALTH", { playerId, change });
+      else if (playerId === state.playerId) {
+        wsClient.send({ type: "SET_MY_HEALTH", payload: { change } });
+      }
+    },
+    setHealthVisibility: (playerId: string, visibility: HealthVisibility) =>
+      dmCommand("SET_HEALTH_VISIBILITY", { playerId, visibility }),
+    updateHealthSettings: (changes: Partial<HealthSettings>) =>
+      dmCommand("UPDATE_HEALTH_SETTINGS", changes),
     /** Rejoin as DM from another device or after clearing the browser, using the Admin Key. */
     recoverAsDm: (roomCode: string, dmToken: string) => {
       saveCredentials({ role: "dm", roomCode: roomCode.trim().toUpperCase(), dmToken: dmToken.trim() });

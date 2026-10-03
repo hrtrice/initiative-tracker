@@ -3,11 +3,12 @@ import type {
   CustomField,
   CustomFieldType,
   FieldValue,
+  HealthSettings,
   Player,
   PlayerView,
   Session,
-  TurnState,
 } from "../shared/types";
+import type { HealthChange, SessionSnapshot } from "../shared/messages";
 import {
   MAX_PLAYERS,
   SESSION_EXPIRY_MS,
@@ -23,6 +24,7 @@ import {
   ErrorCode,
 } from "../shared/constants";
 import { generateUniqueRoomCode } from "./roomCode";
+import { applyHealthChange, healthView, validateVisibility } from "./health";
 import { ServerError } from "./errors";
 
 /** Which session a connection belongs to, and as whom (null playerId = the DM). */
@@ -31,29 +33,33 @@ interface ClientBinding {
   playerId: string | null;
 }
 
-/** NPC custom field values (AC etc.) are only ever sent to the DM. */
-export function toPlayerView(p: Player, viewerIsDM: boolean): PlayerView {
-  return {
+/** New tables track health and show players a bar (no numbers) for new foes. */
+export const DEFAULT_HEALTH_SETTINGS: HealthSettings = { enabled: true, npcDefault: "bar" };
+
+/**
+ * NPC custom field values (AC etc.) are only ever sent to the DM, and health only as far
+ * as the table's settings and the NPC's visibility allow.
+ */
+export function toPlayerView(p: Player, viewerIsDM: boolean, settings: HealthSettings): PlayerView {
+  const view: PlayerView = {
     id: p.id,
     name: p.name,
     initiative: p.initiative,
     isNpc: p.isNpc,
     fields: p.isNpc && !viewerIsDM ? {} : { ...p.fields },
+    health: healthView(p, viewerIsDM, settings.enabled),
   };
-}
-
-export interface SessionSnapshot {
-  players: PlayerView[];
-  turnState: TurnState;
-  customFields: CustomField[];
+  if (p.isNpc && viewerIsDM) view.healthVisibility = p.healthVisibility;
+  return view;
 }
 
 /** What one viewer may see of the session. Broadcasts build this per recipient. */
 export function snapshot(session: Session, viewerIsDM: boolean): SessionSnapshot {
   return {
-    players: session.players.map((p) => toPlayerView(p, viewerIsDM)),
+    players: session.players.map((p) => toPlayerView(p, viewerIsDM, session.healthSettings)),
     turnState: { ...session.turnState },
     customFields: session.customFields.map((f) => ({ ...f })),
+    healthSettings: { ...session.healthSettings },
   };
 }
 
@@ -155,6 +161,7 @@ export class SessionStore {
       status: "WAITING",
       players: [],
       customFields: [],
+      healthSettings: { ...DEFAULT_HEALTH_SETTINGS },
       turnState: { currentPlayerId: null, round: 1 },
       createdAt: now,
       lastActivityAt: now,
@@ -186,7 +193,8 @@ export class SessionStore {
     this.touch(session);
   }
 
-  addNpc(session: Session, name: string, initiative: number): Player {
+  /** HP is optional, so summoning a foe is never slowed down by it. */
+  addNpc(session: Session, name: string, initiative: number, maxHp: number | null = null): Player {
     const npc: Player = {
       id: crypto.randomUUID(),
       sessionId: session.id,
@@ -194,6 +202,8 @@ export class SessionStore {
       initiative,
       isNpc: true,
       fields: {},
+      health: maxHp === null ? null : { current: maxHp, max: maxHp, temp: 0 },
+      healthVisibility: session.healthSettings.npcDefault,
       clientId: null,
       playerToken: null,
       createdAt: Date.now(),
@@ -372,6 +382,46 @@ export class SessionStore {
     if (value === null) delete player.fields[fieldId];
     else player.fields[fieldId] = value;
     this.touch(session);
+  }
+
+  /** Damage, healing, temp HP or a new max for one character. */
+  changeHealth(session: Session, playerId: string, change: HealthChange): void {
+    const player = this.findPlayer(session, playerId);
+    player.health = applyHealthChange(player.health, change);
+    this.touch(session);
+  }
+
+  setHealthVisibility(session: Session, playerId: string, visibility: unknown): void {
+    const player = this.findPlayer(session, playerId);
+    if (!player.isNpc) {
+      throw new ServerError(ErrorCode.INVALID_HEALTH, "Player characters' health is always shown");
+    }
+    player.healthVisibility = validateVisibility(visibility);
+    this.touch(session);
+  }
+
+  /** The default applies to foes summoned from now on; existing ones keep their own setting. */
+  updateHealthSettings(session: Session, changes: { enabled?: unknown; npcDefault?: unknown }): void {
+    if (changes.enabled !== undefined && typeof changes.enabled !== "boolean") {
+      throw new ServerError(ErrorCode.INVALID_HEALTH, "Invalid health setting");
+    }
+    const npcDefault =
+      changes.npcDefault === undefined
+        ? session.healthSettings.npcDefault
+        : validateVisibility(changes.npcDefault);
+    session.healthSettings = {
+      enabled: changes.enabled ?? session.healthSettings.enabled,
+      npcDefault,
+    };
+    this.touch(session);
+  }
+
+  private findPlayer(session: Session, playerId: string): Player {
+    const player = session.players.find((p) => p.id === playerId);
+    if (!player) {
+      throw new ServerError(ErrorCode.PLAYER_NOT_FOUND, "That player is no longer at the table");
+    }
+    return player;
   }
 
   private findField(session: Session, fieldId: string): CustomField {

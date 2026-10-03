@@ -1,10 +1,19 @@
 <script lang="ts">
   import { MIN_INITIATIVE, MAX_INITIATIVE } from "../lib/types";
-  import type { CustomField, FieldValue, PlayerView } from "../lib/types";
+  import type {
+    CustomField,
+    FieldValue,
+    HealthChange,
+    HealthVisibility,
+    PlayerView,
+  } from "../lib/types";
   import FieldEditor from "./FieldEditor.svelte";
   import NpcIcon from "./NpcIcon.svelte";
   import D20 from "./D20.svelte";
   import QuillIcon from "./QuillIcon.svelte";
+  import HealthBar from "./HealthBar.svelte";
+  import HealthEditor from "./HealthEditor.svelte";
+  import HeartIcon from "./HeartIcon.svelte";
 
   let {
     players = [],
@@ -16,6 +25,9 @@
     onUpdateInitiative,
     customFields = [],
     onSetFieldValue,
+    healthEnabled = true,
+    onChangeHealth,
+    onSetHealthVisibility,
   }: {
     players: PlayerView[];
     isDM?: boolean;
@@ -26,7 +38,15 @@
     onUpdateInitiative?: (playerId: string, initiative: number) => void;
     customFields?: CustomField[];
     onSetFieldValue?: (playerId: string, fieldId: string, value: FieldValue | null) => void;
+    healthEnabled?: boolean;
+    onChangeHealth?: (playerId: string, change: HealthChange) => void;
+    onSetHealthVisibility?: (playerId: string, visibility: HealthVisibility) => void;
   } = $props();
+
+  /** The row whose health editor is open. DMs edit anyone; players their own while health is on. */
+  let editingHealthOf = $state<string | null>(null);
+  const canEditHealth = (player: PlayerView) =>
+    isDM || (player.id === myPlayerId && healthEnabled);
 
   /** The row whose custom field editor is open. DMs can edit any row; players only their own. */
   let editingFieldsOf = $state<string | null>(null);
@@ -117,6 +137,14 @@
             <span class="badge">You</span>
           {/if}
         </span>
+        {#if canEditHealth(player)}
+          <button
+            class="btn-icon btn-ghost"
+            onclick={() => (editingHealthOf = editingHealthOf === player.id ? null : player.id)}
+            aria-expanded={editingHealthOf === player.id}
+            aria-label="Edit health for {player.name}"
+          ><HeartIcon /></button>
+        {/if}
         {#if canEditFields(player)}
           <button
             class="btn-icon btn-ghost"
@@ -146,6 +174,9 @@
             >&#10005;</button>
           </div>
         {/if}
+        {#if player.health}
+          <HealthBar health={player.health} />
+        {/if}
         {#if showsFields(player)}
           <span class="field-chips">
             {#each customFields as field (field.id)}
@@ -156,6 +187,17 @@
           </span>
         {/if}
       </li>
+      {#if editingHealthOf === player.id && canEditHealth(player)}
+        <li class="field-editor-item">
+          <HealthEditor
+            {player}
+            {isDM}
+            onchange={(change) => onChangeHealth?.(player.id, change)}
+            onvisibility={(visibility) => onSetHealthVisibility?.(player.id, visibility)}
+            onclose={() => (editingHealthOf = null)}
+          />
+        </li>
+      {/if}
       {#if editingFieldsOf === player.id && canEditFields(player)}
         <li class="field-editor-item">
           <FieldEditor

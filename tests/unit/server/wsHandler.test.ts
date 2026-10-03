@@ -397,6 +397,108 @@ describe("WsHandler", () => {
     });
   });
 
+  describe("health", () => {
+    function healthSetup() {
+      const s = createSession();
+      const a = join(s.roomCode, "Aragorn", 15);
+      s.dm.send({
+        type: "ADD_NPC",
+        payload: { dmToken: s.dmToken, name: "Goblin", initiative: 12, maxHp: 13 },
+      });
+      const joined = s.dm.last();
+      if (joined.type !== "PLAYER_JOINED") throw new Error(JSON.stringify(joined));
+      return { ...s, a, goblinId: joined.payload.players.find((p) => p.name === "Goblin")!.id };
+    }
+    const healthOf = (msg: ServerMessage, name: string) =>
+      "players" in msg.payload ? msg.payload.players.find((p) => p.name === name)?.health : undefined;
+
+    it("joining and summoning don't need HP; an NPC's HP is optional and starts full", () => {
+      const { dm, a } = healthSetup();
+      expect(healthOf(dm.last(), "Aragorn")).toBeNull();
+      expect(healthOf(dm.last(), "Goblin")).toMatchObject({ current: 13, max: 13 });
+      // New foes default to a bar for players: no numbers.
+      expect(healthOf(a.tab.last(), "Goblin")).toEqual({ ratio: 1, state: "healthy", showBar: true });
+    });
+
+    it("players track their own health, which everyone can see", () => {
+      const { dm, a } = healthSetup();
+      a.tab.send({ type: "SET_MY_HEALTH", payload: { change: { kind: "max", amount: 30 } } });
+      a.tab.send({ type: "SET_MY_HEALTH", payload: { change: { kind: "damage", amount: 18 } } });
+      expect(dm.last().type).toBe("HEALTH_UPDATED");
+      expect(healthOf(dm.last(), "Aragorn")).toMatchObject({ current: 12, max: 30, state: "bloodied" });
+      expect(healthOf(a.tab.last(), "Aragorn")).toMatchObject({ current: 12, max: 30, showBar: true });
+    });
+
+    it("players can't change anyone else's health or visibility", () => {
+      const { dmToken, a, goblinId } = healthSetup();
+      a.tab.send({
+        type: "SET_HEALTH",
+        payload: { dmToken, playerId: goblinId, change: { kind: "damage", amount: 5 } },
+      });
+      expect(a.tab.last()).toMatchObject({ type: "ERROR", payload: { code: ErrorCode.UNAUTHORIZED } });
+      a.tab.send({ type: "SET_HEALTH_VISIBILITY", payload: { dmToken, playerId: goblinId, visibility: "both" } });
+      expect(a.tab.last()).toMatchObject({ type: "ERROR", payload: { code: ErrorCode.UNAUTHORIZED } });
+    });
+
+    it("the DM controls what players see of each NPC, and bar-only never leaks the numbers", () => {
+      const { dm, dmToken, a, goblinId } = healthSetup();
+      dm.send({ type: "SET_HEALTH", payload: { dmToken, playerId: goblinId, change: { kind: "damage", amount: 6 } } });
+      expect(healthOf(a.tab.last(), "Goblin")).toEqual({ ratio: 0.55, state: "healthy", showBar: true });
+      expect(JSON.stringify(a.tab.received())).not.toMatch(/"(current|max)"/);
+
+      dm.send({ type: "SET_HEALTH_VISIBILITY", payload: { dmToken, playerId: goblinId, visibility: "number" } });
+      expect(healthOf(a.tab.last(), "Goblin")).toMatchObject({ current: 7, max: 13, showBar: false });
+      dm.send({ type: "SET_HEALTH_VISIBILITY", payload: { dmToken, playerId: goblinId, visibility: "hidden" } });
+      expect(healthOf(a.tab.last(), "Goblin")).toBeNull();
+      // Only the DM is told each NPC's setting.
+      expect(dm.last().type === "HEALTH_UPDATED" && dm.last()).toBeTruthy();
+      const dmGoblin = (dm.last().payload as { players: { name: string; healthVisibility?: string }[] }).players.find(
+        (p) => p.name === "Goblin"
+      );
+      expect(dmGoblin?.healthVisibility).toBe("hidden");
+      expect(JSON.stringify(a.tab.last())).not.toContain("healthVisibility");
+    });
+
+    it("switching health off hides it from players, who then can't change their own", () => {
+      const { dm, dmToken, a } = healthSetup();
+      a.tab.send({ type: "SET_MY_HEALTH", payload: { change: { kind: "max", amount: 30 } } });
+      dm.send({ type: "UPDATE_HEALTH_SETTINGS", payload: { dmToken, enabled: false } });
+      expect(a.tab.last()).toMatchObject({ payload: { healthSettings: { enabled: false } } });
+      expect(healthOf(a.tab.last(), "Aragorn")).toBeNull();
+      expect(healthOf(a.tab.last(), "Goblin")).toBeNull();
+      expect(healthOf(dm.last(), "Aragorn")).toMatchObject({ current: 30 });
+
+      a.tab.send({ type: "SET_MY_HEALTH", payload: { change: { kind: "damage", amount: 1 } } });
+      expect(a.tab.last()).toMatchObject({ type: "ERROR", payload: { code: ErrorCode.HEALTH_DISABLED } });
+    });
+
+    it("the NPC default applies to foes summoned afterwards", () => {
+      const { dm, dmToken, a } = healthSetup();
+      dm.send({ type: "UPDATE_HEALTH_SETTINGS", payload: { dmToken, npcDefault: "both" } });
+      dm.send({ type: "ADD_NPC", payload: { dmToken, name: "Orc", initiative: 9, maxHp: 15 } });
+      expect(healthOf(a.tab.last(), "Orc")).toMatchObject({ current: 15, max: 15, showBar: true });
+      expect(healthOf(a.tab.last(), "Goblin")).not.toHaveProperty("current");
+    });
+
+    it("bad HP and settings are rejected with a readable error", () => {
+      const { dm, dmToken, goblinId } = healthSetup();
+      dm.send({ type: "ADD_NPC", payload: { dmToken, name: "Orc", initiative: 9, maxHp: 0 } });
+      expect(dm.last()).toMatchObject({ type: "ERROR", payload: { code: ErrorCode.INVALID_HEALTH } });
+      dm.send({ type: "SET_HEALTH_VISIBILITY", payload: { dmToken, playerId: goblinId, visibility: "x" as never } });
+      expect(dm.last()).toMatchObject({ type: "ERROR", payload: { code: ErrorCode.INVALID_HEALTH } });
+      dm.send({ type: "UPDATE_HEALTH_SETTINGS", payload: { dmToken, enabled: "yes" as never } });
+      expect(dm.last()).toMatchObject({ type: "ERROR", payload: { code: ErrorCode.INVALID_HEALTH } });
+    });
+
+    it("player HP carries over to a new encounter", () => {
+      const { dm, dmToken, a } = healthSetup();
+      a.tab.send({ type: "SET_MY_HEALTH", payload: { change: { kind: "max", amount: 30 } } });
+      a.tab.send({ type: "SET_MY_HEALTH", payload: { change: { kind: "damage", amount: 5 } } });
+      dm.send({ type: "RESET_SESSION", payload: { dmToken } });
+      expect(healthOf(a.tab.last(), "Aragorn")).toMatchObject({ current: 25, max: 30 });
+    });
+  });
+
   describe("sweepExpiredSessions", () => {
     it("evicts idle sessions nobody is connected to", () => {
       const { dm, sessionId } = createSession();

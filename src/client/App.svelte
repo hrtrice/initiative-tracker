@@ -7,6 +7,7 @@
   import DMToolbar from "./components/DMToolbar.svelte";
   import InitiativePrompt from "./components/InitiativePrompt.svelte";
   import CustomFieldsManager from "./components/CustomFieldsManager.svelte";
+  import HealthSettings from "./components/HealthSettings.svelte";
 
   const {
     state: sessionState,
@@ -23,6 +24,9 @@
     updateField,
     removeField,
     setFieldValue,
+    changeHealth,
+    setHealthVisibility,
+    updateHealthSettings,
     recoverAsDm,
     submitInitiative,
     leaveSession,
@@ -108,6 +112,9 @@
       onUpdateInitiative={updateInitiative}
       customFields={sessionState.customFields}
       onSetFieldValue={setFieldValue}
+      healthEnabled={sessionState.healthSettings.enabled}
+      onChangeHealth={changeHealth}
+      onSetHealthVisibility={setHealthVisibility}
     />
 
     <DMToolbar
@@ -121,6 +128,7 @@
     />
 
     {#if sessionState.isDM}
+      <HealthSettings settings={sessionState.healthSettings} onchange={updateHealthSettings} />
       <CustomFieldsManager
         fields={sessionState.customFields}
         onAdd={addField}

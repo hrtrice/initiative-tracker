@@ -1,4 +1,12 @@
-import type { CustomField, CustomFieldType, FieldValue, PlayerView, TurnState } from "./types";
+import type {
+  CustomField,
+  CustomFieldType,
+  FieldValue,
+  HealthSettings,
+  HealthVisibility,
+  PlayerView,
+  TurnState,
+} from "./types";
 import { ErrorCode } from "./constants";
 
 // ---------------------------------------------------------------------------
@@ -55,6 +63,8 @@ export interface AddNpcPayload {
   dmToken: string;
   name: string;
   initiative: number;
+  /** Optional max HP; the NPC starts at full health. */
+  maxHp?: number | null;
 }
 
 /** A player entering their own roll; only allowed while their initiative is pending. */
@@ -97,6 +107,41 @@ export interface SetMyFieldPayload {
   value: FieldValue | null;
 }
 
+/**
+ * A change to someone's health. Sent as an action rather than new numbers so a player and
+ * the DM changing the same character at once can't overwrite each other.
+ * - damage: temp HP absorbs it first; HP stops at 0.
+ * - heal: up to max HP.
+ * - temp: sets temporary HP (they don't stack; 0 clears them).
+ * - max: sets max HP. The first time, current HP starts full; null stops tracking health.
+ */
+export type HealthChange =
+  | { kind: "damage" | "heal" | "temp"; amount: number }
+  | { kind: "max"; amount: number | null };
+
+export interface SetHealthPayload {
+  dmToken: string;
+  playerId: string;
+  change: HealthChange;
+}
+
+/** A player changing their own character's health. */
+export interface SetMyHealthPayload {
+  change: HealthChange;
+}
+
+export interface SetHealthVisibilityPayload {
+  dmToken: string;
+  playerId: string;
+  visibility: HealthVisibility;
+}
+
+export interface UpdateHealthSettingsPayload {
+  dmToken: string;
+  enabled?: boolean;
+  npcDefault?: HealthVisibility;
+}
+
 export interface ClientMessageMap {
   CREATE_SESSION: CreateSessionPayload;
   JOIN_SESSION: JoinSessionPayload;
@@ -116,6 +161,10 @@ export interface ClientMessageMap {
   REMOVE_FIELD: RemoveFieldPayload;
   SET_FIELD_VALUE: SetFieldValuePayload;
   SET_MY_FIELD: SetMyFieldPayload;
+  SET_HEALTH: SetHealthPayload;
+  SET_MY_HEALTH: SetMyHealthPayload;
+  SET_HEALTH_VISIBILITY: SetHealthVisibilityPayload;
+  UPDATE_HEALTH_SETTINGS: UpdateHealthSettingsPayload;
 }
 
 export type ClientMessage = {
@@ -129,85 +178,55 @@ export type ClientMessage = {
 // Server → Client
 // ---------------------------------------------------------------------------
 
-export interface SessionCreatedPayload {
-  roomCode: string;
-  dmToken: string;
-  sessionId: string;
+/** The session as one viewer may see it. Every state broadcast carries a full one. */
+export interface SessionSnapshot {
   players: PlayerView[];
   turnState: TurnState;
   customFields: CustomField[];
+  healthSettings: HealthSettings;
 }
 
-export interface JoinAcceptedPayload {
+export interface SessionCreatedPayload extends SessionSnapshot {
+  roomCode: string;
+  dmToken: string;
+  sessionId: string;
+}
+
+export interface JoinAcceptedPayload extends SessionSnapshot {
   sessionId: string;
   roomCode: string;
   playerId: string;
   playerToken: string;
-  players: PlayerView[];
-  turnState: TurnState;
-  customFields: CustomField[];
 }
 
 /** Reply to RECONNECT_SESSION / RECOVER_SESSION: who you are plus the full state. */
-export interface SessionStateSyncPayload {
+export interface SessionStateSyncPayload extends SessionSnapshot {
   sessionId: string;
   roomCode: string;
-  players: PlayerView[];
-  turnState: TurnState;
-  customFields: CustomField[];
   isDM: boolean;
   /** Your own player id; null for the DM. */
   playerId: string | null;
 }
 
-export interface PlayerJoinedPayload {
-  players: PlayerView[];
-  turnState: TurnState;
-  customFields: CustomField[];
-}
+export type PlayerJoinedPayload = SessionSnapshot;
 
-export interface InitiativeUpdatedPayload {
-  players: PlayerView[];
-  turnState: TurnState;
-  customFields: CustomField[];
-}
+export type InitiativeUpdatedPayload = SessionSnapshot;
 
-export interface PlayersReorderedPayload {
-  players: PlayerView[];
-  turnState: TurnState;
-  customFields: CustomField[];
-}
+export type PlayersReorderedPayload = SessionSnapshot;
 
-export interface PlayerRemovedPayload {
-  players: PlayerView[];
-  turnState: TurnState;
-  customFields: CustomField[];
-}
+export type PlayerRemovedPayload = SessionSnapshot;
 
-export interface TurnAdvancedPayload {
-  players: PlayerView[];
-  turnState: TurnState;
-  customFields: CustomField[];
-}
+export type TurnAdvancedPayload = SessionSnapshot;
 
-export interface TurnRegressedPayload {
-  players: PlayerView[];
-  turnState: TurnState;
-  customFields: CustomField[];
-}
+export type TurnRegressedPayload = SessionSnapshot;
 
-export interface SessionResetPayload {
-  players: PlayerView[];
-  turnState: TurnState;
-  customFields: CustomField[];
-}
+export type SessionResetPayload = SessionSnapshot;
 
 /** Field definitions or values changed. */
-export interface FieldsUpdatedPayload {
-  players: PlayerView[];
-  turnState: TurnState;
-  customFields: CustomField[];
-}
+export type FieldsUpdatedPayload = SessionSnapshot;
+
+/** Someone's health, an NPC's health visibility or the table's health settings changed. */
+export type HealthUpdatedPayload = SessionSnapshot;
 
 export interface HeartbeatPayload {
   timestamp: number;
@@ -234,6 +253,7 @@ export interface ServerMessageMap {
   TURN_REGRESSED: TurnRegressedPayload;
   SESSION_RESET: SessionResetPayload;
   FIELDS_UPDATED: FieldsUpdatedPayload;
+  HEALTH_UPDATED: HealthUpdatedPayload;
   HEARTBEAT: HeartbeatPayload;
   ERROR: ErrorPayload;
   YOU_WERE_REMOVED: YouWereRemovedPayload;

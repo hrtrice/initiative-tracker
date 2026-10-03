@@ -2,18 +2,25 @@ import type {
   CustomField,
   CustomFieldType,
   FieldValue,
+  HealthSettings,
+  HealthView,
+  HealthVisibility,
   Player,
   PlayerView,
   Session,
   TurnState,
 } from "@shared/types";
-import type { ClientMessage, ServerMessage } from "@shared/messages";
+import type { ClientMessage, HealthChange, ServerMessage } from "@shared/messages";
 import type { ConnectionStatus } from "./wsClient";
 
 export type {
   CustomField,
   CustomFieldType,
   FieldValue,
+  HealthChange,
+  HealthSettings,
+  HealthView,
+  HealthVisibility,
   Session,
   Player,
   PlayerView,
@@ -29,6 +36,7 @@ export interface SessionState {
   players: PlayerView[];
   turnState: TurnState | null;
   customFields: CustomField[];
+  healthSettings: HealthSettings;
   isDM: boolean;
   playerId: string | null;
   playerToken: string | null;

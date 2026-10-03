@@ -13,6 +13,8 @@ function makePlayer(overrides: Partial<Player> = {}): Player {
     initiative: overrides.initiative ?? 10,
     isNpc: overrides.isNpc ?? false,
     fields: overrides.fields ?? {},
+    health: overrides.health ?? null,
+    healthVisibility: overrides.healthVisibility ?? "both",
     clientId: overrides.clientId ?? null,
     playerToken: overrides.playerToken ?? `token-${nextId}`,
     createdAt: overrides.createdAt ?? Date.now(),
@@ -393,6 +395,7 @@ describe("SessionStore", () => {
         initiative: 15,
         isNpc: false,
         fields: {},
+        health: null,
       });
     });
   });

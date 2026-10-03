@@ -54,6 +54,12 @@
   /* The d20 initiative badge */
   --qr-dark: #1b130b;
   --qr-light: #efe3c8;
+  --health-good: #c9a54a;
+  --health-bloodied: #d9822b;
+  --health-down: #c0392b;
+  --health-down-text: #ee8a80;
+  --health-temp: #8fb3c9;
+  --health-track: rgba(0, 0, 0, 0.45);
   --d20-fill: rgba(0, 0, 0, 0.35);
   --d20-stroke: #c99a52;
   --radius-sm: 0.1875rem;

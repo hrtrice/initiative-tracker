@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { MAX_NAME_LENGTH, MIN_INITIATIVE, MAX_INITIATIVE } from "../lib/types";
+  import { MAX_NAME_LENGTH, MIN_INITIATIVE, MAX_INITIATIVE, MAX_HP } from "../lib/types";
   import TableQr from "./TableQr.svelte";
 
   let {
@@ -17,12 +17,14 @@
     onAdvanceTurn?: () => void;
     onPreviousTurn?: () => void;
     onResetSession?: () => void;
-    onAddNpc?: (name: string, initiative: number) => void;
+    onAddNpc?: (name: string, initiative: number, maxHp: number | null) => void;
   } = $props();
 
   let copyFeedback = $state("");
   let npcName = $state("");
   let npcInitiative = $state("");
+  /** Optional: a foe can be summoned without HP and given it later. */
+  let npcHp = $state<number | null>(null);
   let npcFeedback = $state("");
 
   let maskedKey = $derived(dmToken ? dmToken.slice(0, 8) + "..." : "");
@@ -57,9 +59,10 @@
       npcFeedback = "Name the foe and give its initiative";
       return;
     }
-    onAddNpc?.(name, init);
+    onAddNpc?.(name, init, npcHp);
     npcName = "";
     npcInitiative = "";
+    npcHp = null;
     npcFeedback = `${name} joins the fray!`;
     setTimeout(() => {
       npcFeedback = "";
@@ -106,6 +109,14 @@
           placeholder="Init"
           min={MIN_INITIATIVE}
           max={MAX_INITIATIVE}
+        />
+        <input
+          type="number"
+          bind:value={npcHp}
+          placeholder="HP (optional)"
+          aria-label="Foe's max HP (optional)"
+          min="1"
+          max={MAX_HP}
         />
         <button class="btn-primary" onclick={handleAddNpc}>Summon</button>
       </div>

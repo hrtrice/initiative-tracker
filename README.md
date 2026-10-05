@@ -4,6 +4,17 @@ A real-time initiative tracker for in-person D&D games. The DM creates a room, p
 
 > A hobby project built with a professional workflow: specs first, typed end to end, unit and browser tests, and CI/CD to production.
 
+<table>
+  <tr>
+    <td align="center"><img src="docs/screenshot-dm.png" alt="Dungeon Master view with the full turn order and controls" width="300"></td>
+    <td align="center"><img src="docs/screenshot-player.png" alt="Player view of the same turn order" width="300"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Dungeon Master view</sub></td>
+    <td align="center"><sub>Player view</sub></td>
+  </tr>
+</table>
+
 ## Features
 
 - **Jackbox-style joining.** Players join with a short room code. No sign-up.

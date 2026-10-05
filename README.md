@@ -1,8 +1,33 @@
 # Initiative Tracker
 
-Real-time D&D initiative tracker. The DM creates a room, players join with a 4-digit code and their initiative, and everyone sees the turn order update live.
+A real-time initiative tracker for in-person D&D games. The DM creates a room, players join from their phones with a 4-digit code and enter their initiative, and everyone sees the turn order update live. No accounts, no installs, no sticky notes.
 
-Stack: Svelte 5 SPA, Express + `ws` server, in-memory session store. The specs and the current fix plan are in `.specs/`.
+> A hobby project built with a professional workflow: specs first, typed end to end, unit and browser tests, and CI/CD to production.
+
+## Features
+
+- **Jackbox-style joining.** Players join with a short room code. No sign-up.
+- **Live turn order.** Changes reach every device over WebSockets, targeting sub-second latency.
+- **DM controls.** The DM runs the table from a phone and can edit, reorder and correct entries. Players can only submit their own initiative.
+- **Health tracking** with per-NPC visibility for players, and a table QR code that pre-fills the table number.
+- **Installable PWA** with mobile-first layouts that work from 320px wide.
+- **Themed UI** (tavern, tome and torchlit designs in `design/themes/`).
+
+## Tech stack
+
+| Area | Choice |
+|------|--------|
+| Client | Svelte 5, TypeScript, Vite |
+| Server | Node.js, Express, `ws` (in-memory session store) |
+| Shared | Typed message contracts in `src/shared/` used by client and server |
+| Testing | Unit tests plus Playwright end-to-end tests |
+| Delivery | GitHub Actions CI, Docker, Railway (infrastructure as code in `.railway/`) |
+
+## Design notes
+
+- Sessions are ephemeral and live in server memory. That fits a single table of about 20 people and keeps the app simple and free to host.
+- The DM is the sole authority over the order, so there are no concurrent-edit conflicts to resolve. That is why it uses plain WebSockets instead of CRDTs.
+- The product spec and fix plan are in [`.specs/`](.specs/).
 
 ## Development
 

@@ -97,10 +97,3 @@ npx playwright test --config tests/e2e/playwright.config.ts   # e2e (Pixel 7 pro
 - **Tests come with every change:** unit tests for rules, handler tests for permissions and
   for what each connection receives, and e2e tests for user flows. Flaky tests get fixed, not
   retried.
-
-## Open follow-ups
-
-- `npm audit` reports moderate advisories in runtime and dev dependencies; they haven't been
-  triaged yet.
-- GitHub Actions (`actions/checkout@v4`, `setup-node@v4`, `upload-artifact@v4`) warn about the
-  Node 20 deprecation. Bump them to their latest majors.

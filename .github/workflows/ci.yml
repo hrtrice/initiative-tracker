@@ -9,8 +9,8 @@ jobs:
   ci:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -24,7 +24,7 @@ jobs:
           npx playwright test --config tests/e2e/playwright.config.ts
       - name: Upload browser test traces
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-traces
           path: test-results/
@@ -48,14 +48,14 @@ jobs:
     runs-on: ubuntu-latest
     concurrency: deploy-production
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # Prints the project, environment and services the token can see (no secrets),
       # so a "Service not found" failure shows what RAILWAY_SERVICE must match.
       - name: Show Railway target
         run: npx --yes @railway/cli@5 status || true
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm

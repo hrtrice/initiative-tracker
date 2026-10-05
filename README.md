@@ -57,3 +57,7 @@ One-time setup:
 Sessions live only in server memory, so `.railway/railway.ts` pins the service to **1 replica** with **App Sleeping off**. Don't change either in the Railway dashboard: the next deploy applies the file again.
 
 A deploy or restart ends every active session.
+
+## License
+
+[MIT](LICENSE)
